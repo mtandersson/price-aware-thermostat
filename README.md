@@ -42,10 +42,10 @@ The pure optimizer and hysteresis tests have no Home Assistant dependency:
 python -m unittest discover -s tests -v
 ```
 
-Home Assistant compatibility checks run against Home Assistant 2026.11.1 in CI with Python 3.14. To run them manually in a dedicated development environment:
+Home Assistant compatibility checks run against Home Assistant 2026.11.0 in CI with Python 3.14. To run them manually in a dedicated development environment:
 
 ```bash
-python -m pip install "homeassistant==2026.11.1" "pytest-homeassistant==2026.11.0" ruff
+python -m pip install "homeassistant==2026.11.0" "pytest-homeassistant==2026.11.0" ruff
 pytest -q tests/integration
 ruff check custom_components/price_aware_thermostat tests/integration
 ```
