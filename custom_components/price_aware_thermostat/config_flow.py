@@ -24,6 +24,7 @@ from .const import (
     CONF_HOT_TOLERANCE,
     CONF_LOOKAHEAD,
     CONF_MAX_TEMP,
+    CONF_MAX_SENSOR_AGE,
     CONF_MIN_CYCLE,
     CONF_MIN_TEMP,
     CONF_NAME,
@@ -84,6 +85,10 @@ def _settings_schema(initial: dict[str, Any], *, options: bool) -> vol.Schema:
         vol.Required(
             CONF_MIN_CYCLE, default=initial.get(CONF_MIN_CYCLE, DEFAULTS[CONF_MIN_CYCLE])
         ): _number(0, 3600, 30),
+        vol.Required(
+            CONF_MAX_SENSOR_AGE,
+            default=initial.get(CONF_MAX_SENSOR_AGE, DEFAULTS[CONF_MAX_SENSOR_AGE]),
+        ): _number(5, 360, 5),
     }
     if options:
         config[vol.Required(CONF_SHADOW, default=initial.get(CONF_SHADOW, True))] = (
