@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from custom_components.price_aware_thermostat.control import (
     desired_heater_state,
     is_temperature_sample_fresh,
+    parse_temperature_celsius,
 )
 
 
@@ -38,6 +39,23 @@ class HeatingControlTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             desired_heater_state(5.0, 6.0, False, -0.1, 0.3)
 
+
+    def test_temperature_celsius_is_unchanged(self):
+        self.assertAlmostEqual(5.3, parse_temperature_celsius("5.3", "°C"))
+
+    def test_temperature_fahrenheit_is_converted(self):
+        self.assertAlmostEqual(5.0, parse_temperature_celsius("41.0", "°F"))
+
+    def test_temperature_kelvin_is_converted(self):
+        self.assertAlmostEqual(0.0, parse_temperature_celsius("273.15", "K"))
+
+    def test_unknown_unit_does_not_drive_heater(self):
+        self.assertIsNone(parse_temperature_celsius("20", "degrees"))
+        self.assertIsNone(parse_temperature_celsius("20", None))
+
+    def test_invalid_sensor_value_is_rejected(self):
+        for raw in ("unknown", "unavailable", "NaN", "inf", "-inf"):
+            self.assertIsNone(parse_temperature_celsius(raw, "°C"))
 
     def test_recent_temperature_report_is_fresh(self):
         now = datetime(2026, 11, 14, 12, tzinfo=timezone.utc)
