@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from .config_entry import PriceAwareConfigEntry
 from .const import (
     CONF_AREA,
     CONF_FILTER,
@@ -25,7 +25,7 @@ from .coordinator import NordPoolPriceCoordinator
 
 
 async def async_get_config_entry_diagnostics(
-    hass: HomeAssistant, entry: ConfigEntry
+    hass: HomeAssistant, entry: PriceAwareConfigEntry
 ) -> dict[str, Any]:
     """Return non-sensitive debug information for this config entry."""
     coordinator: NordPoolPriceCoordinator = entry.runtime_data
