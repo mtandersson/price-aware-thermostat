@@ -15,7 +15,6 @@ from homeassistant.components.climate import (
     HVACMode,
     RestoreClimate,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     STATE_OFF,
     STATE_ON,
@@ -29,6 +28,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
 from homeassistant.util import dt as dt_util
 
+from .config_entry import PriceAwareConfigEntry
 from .const import (
     CONF_BASE_TEMP,
     CONF_COLD_TOLERANCE,
@@ -61,7 +61,7 @@ PRESET_FIXED = "fixed"
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: PriceAwareConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Register one climate entity per integration entry."""
@@ -82,7 +82,7 @@ class PriceAwareThermostat(RestoreClimate):
     _attr_native_target_temperature_step = 0.1
 
     def __init__(
-        self, entry: ConfigEntry, coordinator: NordPoolPriceCoordinator
+        self, entry: PriceAwareConfigEntry, coordinator: NordPoolPriceCoordinator
     ) -> None:
         """Configure the thermostat without writing to any switches."""
         self._entry = entry
