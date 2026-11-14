@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import timedelta
 import logging
 from math import isfinite
 from typing import Any
@@ -176,6 +176,12 @@ class PriceAwareThermostat(RestoreClimate):
     async def _async_evaluate(self) -> None:
         """Evaluate temperature and synchronize only when live control is enabled."""
         async with self._control_lock:
+            previous = (
+                self._attr_current_temperature,
+                self._attr_hvac_action,
+                self._last_result,
+                self._planned_heating,
+            )
             temp_state = self.hass.states.get(self._sensor)
             heater_state = self.hass.states.get(self._heater)
             self._attr_current_temperature = None
@@ -189,7 +195,18 @@ class PriceAwareThermostat(RestoreClimate):
                 except ValueError:
                     pass
 
-            self._last_result = self._calculate()
+            try:
+                self._last_result = self._calculate()
+            except ValueError:
+                _LOGGER.warning("Invalid price data; using the configured base temperature")
+                self._last_result = OptimizationResult(
+                    effective_target_c=float(self._attr_target_temperature),
+                    reason="price_unavailable",
+                    current_price_sek_per_kwh=None,
+                    future_weighted_price_sek_per_kwh=None,
+                    price_difference_sek_per_kwh=None,
+                    future_coverage_fraction=0.0,
+                )
             effective_target = (
                 self._last_result.effective_target_c
                 if self._attr_preset_mode == PRESET_PRICE_AWARE
@@ -237,7 +254,14 @@ class PriceAwareThermostat(RestoreClimate):
                             )
                         except HomeAssistantError:
                             _LOGGER.exception("Could not change the heating relay")
-            self.async_write_ha_state()
+            updated = (
+                self._attr_current_temperature,
+                self._attr_hvac_action,
+                self._last_result,
+                self._planned_heating,
+            )
+            if previous != updated:
+                self.async_write_ha_state()
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Update the base temperature, preserving its configured limits."""
