@@ -20,7 +20,8 @@
           "sensitivity_c_per_sek_per_kwh": "Sensitivity (°C per SEK/kWh)",
           "cold_tolerance": "Heat-on tolerance (°C)",
           "hot_tolerance": "Heat-off tolerance (°C)",
-          "min_cycle_seconds": "Minimum relay cycle time (seconds)"
+          "min_cycle_seconds": "Minimum relay cycle time (seconds)",
+          "max_sensor_age_minutes": "Maximum temperature sample age (minutes)"
         }
       }
     },
@@ -50,7 +51,8 @@
           "hot_tolerance": "Heat-off tolerance (°C)",
           "min_cycle_seconds": "Minimum cycle (seconds)",
           "shadow_mode": "Shadow mode (no relay control)",
-          "safety_acknowledged": "I verified exclusive heater ownership and independent hardware safeguards"
+          "safety_acknowledged": "I verified exclusive heater ownership and independent hardware safeguards",
+          "max_sensor_age_minutes": "Maximum temperature sample age (minutes)"
         }
       }
     },
