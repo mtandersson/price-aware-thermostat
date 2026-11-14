@@ -52,7 +52,7 @@ from .control import (
     parse_temperature_celsius,
 )
 from .coordinator import NordPoolPriceCoordinator
-from .optimizer import OptimizationResult, OptimizerConfig, optimize
+from .optimizer import Filter, OptimizationResult, OptimizerConfig, optimize
 
 _LOGGER = logging.getLogger(__name__)
 PRESET_PRICE_AWARE = "price_aware"
@@ -116,15 +116,28 @@ class PriceAwareThermostat(RestoreClimate):
         self._sensor_fresh = False
         self._control_lock = asyncio.Lock()
 
+    @property
+    def _base_target(self) -> float:
+        """Read the active base target with a typed startup fallback."""
+        configured = self._attr_native_target_temperature
+        return configured if configured is not None else float(DEFAULTS[CONF_BASE_TEMP])
+
     def _calculate(self) -> OptimizationResult:
         """Calculate an effective temperature; errors never actuate a heater."""
         settings = {**self._entry.data, **self._entry.options}
+        raw_filter = settings.get(CONF_FILTER, DEFAULTS[CONF_FILTER])
+        if raw_filter == "rectangle":
+            filter_type: Filter = "rectangle"
+        elif raw_filter == "triangle":
+            filter_type = "triangle"
+        else:
+            raise ValueError("Unsupported price filter")
         config = OptimizerConfig(
-            base_temperature=float(self._attr_native_target_temperature),
+            base_temperature=self._base_target,
             minimum_temperature=self._attr_min_temp,
             maximum_temperature=self._attr_max_temp,
             lookahead_minutes=int(settings.get(CONF_LOOKAHEAD, DEFAULTS[CONF_LOOKAHEAD])),
-            filter_type=str(settings.get(CONF_FILTER, DEFAULTS[CONF_FILTER])),
+            filter_type=filter_type,
             deadband_sek_per_kwh=float(
                 settings.get(CONF_DEADBAND, DEFAULTS[CONF_DEADBAND])
             ),
@@ -227,7 +240,7 @@ class PriceAwareThermostat(RestoreClimate):
             except ValueError:
                 _LOGGER.warning("Invalid price data; using the configured base temperature")
                 self._last_result = OptimizationResult(
-                    effective_target_c=float(self._attr_native_target_temperature),
+                    effective_target_c=self._base_target,
                     reason="price_unavailable",
                     current_price_sek_per_kwh=None,
                     future_weighted_price_sek_per_kwh=None,
@@ -237,7 +250,7 @@ class PriceAwareThermostat(RestoreClimate):
             effective_target = (
                 self._last_result.effective_target_c
                 if self._attr_preset_mode == PRESET_PRICE_AWARE
-                else float(self._attr_native_target_temperature)
+                else self._base_target
             )
             currently_on = heater_state is not None and heater_state.state == STATE_ON
             self._attr_hvac_action = (
