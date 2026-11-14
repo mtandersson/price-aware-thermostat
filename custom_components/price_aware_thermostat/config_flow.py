@@ -197,6 +197,9 @@ class PriceAwareThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="reconfigure_live_not_allowed")
         errors: dict[str, str] = {}
         if user_input is not None:
+            if not {**entry.data, **entry.options}.get(CONF_SHADOW, True):
+                # Live actuation may have been enabled after the form was shown.
+                return self.async_abort(reason="reconfigure_live_not_allowed")
             source = self.hass.config_entries.async_get_entry(
                 user_input[CONF_NORDPOOL_ENTRY]
             )

@@ -51,7 +51,8 @@ Nord Pool config entry and/or market area. It is allowed only while shadow mode
 is enabled and changes nothing else: the sensor, actuator, control type and
 other settings stay as they are, and entry/entity IDs are preserved. The source
 must be a `nordpool` entry that offers the chosen area, and the entry reloads
-on success. To change the sensor or actuator, use the options flow instead.
+on success. To change the sensor or actuator, use the options flow instead. A live entry must first be switched to shadow mode in the
+options before it can be reconfigured. See issue #3 for the safety rationale.
 
 ## AC preview behavior and next steps
 

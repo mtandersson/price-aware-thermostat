@@ -147,7 +147,7 @@ async def test_reconfigure_uses_new_source_for_price_requests(hass: HomeAssistan
     ],
 )
 async def test_reconfigure_rejects_invalid_source(
-    hass: HomeAssistant, kind: str, case: str, error: str
+    hass: HomeAssistant, services: list[list], kind: str, case: str, error: str
 ) -> None:
     old, new = _sources(hass)
     other = MockConfigEntry(domain="other", data={"areas": ["SE3"]})
@@ -162,28 +162,103 @@ async def test_reconfigure_rejects_invalid_source(
     }[case]
     with patch(UPDATE, return_value=()):
         result = await _start(hass, entry)
+        coordinator = entry.runtime_data
         result = await hass.config_entries.flow.async_configure(result["flow_id"], user_input)
         await hass.async_block_till_done()
         assert result["type"] is FlowResultType.FORM
         assert result["errors"] == {"base": error}
         assert dict(entry.data) == before
+        assert entry.runtime_data is coordinator
         # The form can be corrected and resubmitted.
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {CONF_NORDPOOL_ENTRY: new.entry_id, CONF_AREA: "se3"}
         )
         assert result["type"] is FlowResultType.ABORT
         assert entry.data[CONF_AREA] == "SE3"
+    assert not any(services)
 
 
 @pytest.mark.parametrize("kind", [CONTROL_SWITCH, CONTROL_CLIMATE])
-async def test_reconfigure_rejected_while_live(hass: HomeAssistant, kind: str) -> None:
+async def test_reconfigure_rejected_while_live(
+    hass: HomeAssistant, services: list[list], kind: str
+) -> None:
     old, _new = _sources(hass)
     entry = _entry(hass, old, kind, shadow=False)
     before = dict(entry.data)
     with patch(UPDATE, return_value=()):
         result = await _start(hass, entry)
+        coordinator = entry.runtime_data
         assert result["type"] is FlowResultType.ABORT
         assert result["reason"] == "reconfigure_live_not_allowed"
+        assert entry.runtime_data is coordinator
+        assert not any(services)
         assert dict(entry.data) == before
         assert entry.options == {CONF_SHADOW: False}
         assert entry.state is ConfigEntryState.LOADED
+
+
+async def test_reconfigure_rechecks_live_on_submit(
+    hass: HomeAssistant, services: list[list]
+) -> None:
+    old, new = _sources(hass)
+    entry = _entry(hass, old, CONTROL_SWITCH)
+    before = dict(entry.data)
+    with patch(UPDATE, return_value=()):
+        result = await _start(hass, entry)
+        coordinator = entry.runtime_data
+        assert result["type"] is FlowResultType.FORM
+        hass.config_entries.async_update_entry(entry, options={CONF_SHADOW: False})
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_NORDPOOL_ENTRY: new.entry_id, CONF_AREA: "SE3"}
+        )
+        await hass.async_block_till_done()
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == "reconfigure_live_not_allowed"
+        assert dict(entry.data) == before
+        assert entry.runtime_data is coordinator
+        assert entry.state is ConfigEntryState.LOADED
+    assert not any(services)
+
+
+async def test_reconfigure_defaults_to_shadow_when_unset(hass: HomeAssistant) -> None:
+    old, new = _sources(hass)
+    entry = _entry(hass, old, CONTROL_SWITCH)
+    hass.config_entries.async_update_entry(
+        entry, data={k: v for k, v in entry.data.items() if k != CONF_SHADOW}, options={}
+    )
+    assert CONF_SHADOW not in entry.data
+    with patch(UPDATE, return_value=()):
+        result = await _start(hass, entry)
+        assert result["type"] is FlowResultType.FORM
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_NORDPOOL_ENTRY: new.entry_id, CONF_AREA: "SE3"}
+        )
+        assert result["reason"] == "reconfigure_successful"
+        assert entry.data[CONF_AREA] == "SE3"
+
+
+async def test_reconfigure_options_override_shadow_in_data(hass: HomeAssistant) -> None:
+    old, _new = _sources(hass)
+    entry = _entry(hass, old, CONTROL_SWITCH, shadow=False)
+    hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_SHADOW: True})
+    with patch(UPDATE, return_value=()):
+        result = await _start(hass, entry)
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == "reconfigure_live_not_allowed"
+
+
+async def test_reconfigure_source_without_areas_is_invalid_area(
+    hass: HomeAssistant,
+) -> None:
+    old, _new = _sources(hass)
+    bare = MockConfigEntry(domain="nordpool", data={})
+    bare.add_to_hass(hass)
+    entry = _entry(hass, old, CONTROL_SWITCH)
+    with patch(UPDATE, return_value=()):
+        result = await _start(hass, entry)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_NORDPOOL_ENTRY: bare.entry_id, CONF_AREA: "SE3"}
+        )
+        assert result["type"] is FlowResultType.FORM
+        assert result["errors"] == {"base": "invalid_market_area"}
+        assert entry.data[CONF_AREA] == "SE4"
