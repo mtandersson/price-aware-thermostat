@@ -24,6 +24,8 @@ MIN_COMMAND_INTERVAL = 60.0
 RETRY_SECONDS = 120.0
 MAX_ATTEMPTS = 3
 EXHAUSTED_COOLDOWN = 900.0
+# A failed safety "off" is retried sooner than a failed start.
+OFF_EXHAUSTED_COOLDOWN = 300.0
 
 
 @dataclass(frozen=True)
@@ -234,7 +236,10 @@ class CommandMemory:
         if self.pending is not None and self.pending.signature == command.signature:
             self.attempts += 1
         else:
+            # A different command is a new episode: earlier failures must not
+            # shorten or block its retries.
             self.attempts = 1
+            self.exhausted_at = None
         self.pending = command
         self.pending_since = now
         self.last_command_at = now
@@ -274,12 +279,16 @@ def plan_next_command(
 
     command, status = _desired_command(intent, obs, memory, limits, tolerance, now, min_restart_pause)
     if command is None:
+        if status == "in_sync":
+            # Nothing is wanted: an earlier unacknowledged episode is over and
+            # must not count towards the next, unrelated command.
+            memory.pending = None
+            memory.pending_since = None
+            memory.attempts = 0
+            memory.exhausted_at = None
         return Plan(None, status)
 
-    if command.mode == "off":
-        # Safety direction: never delayed by rate limits, only retry-throttled.
-        return _throttle(command, memory, now, status, rate_limited=False)
-    return _throttle(command, memory, now, status, rate_limited=True)
+    return _throttle(command, memory, now, status)
 
 
 def _desired_command(
@@ -308,38 +317,47 @@ def _desired_command(
         waited = now - memory.off_since
         if waited < min_restart_pause:
             return None, "restart_pause"
+        if intent.native_target is None or limits is None:
+            # Never start the pump without a target to give it.
+            return None, "invalid_backend_limits"
         return Command("set_mode", intent.mode), "starting"
 
     # Another active or foreign mode: safe changeover goes through off first.
     return Command("set_mode", "off"), "changeover_off"
 
 
-def _throttle(
-    command: Command, memory: CommandMemory, now: float, status: str, *, rate_limited: bool
-) -> Plan:
+def _throttle(command: Command, memory: CommandMemory, now: float, status: str) -> Plan:
     pending = memory.pending
+    is_off = command.kind == "set_mode" and command.mode == "off"
+    cooldown = OFF_EXHAUSTED_COOLDOWN if is_off else EXHAUSTED_COOLDOWN
     if pending is not None and pending.signature == command.signature:
         if memory.exhausted_at is not None:
-            if now - memory.exhausted_at < EXHAUSTED_COOLDOWN:
+            if now - memory.exhausted_at < cooldown:
                 return Plan(None, "retries_exhausted")
             memory.attempts = 0
             memory.exhausted_at = None
         elif memory.pending_since is not None and now - memory.pending_since < RETRY_SECONDS:
             return Plan(None, "pending_acknowledgment")
     last = memory.last_command
-    # A target sent right after its own start command completes that start and
-    # is not delayed; every other non-off command keeps the minimum spacing.
-    completes_start = (
-        command.kind == "set_temperature"
-        and last is not None
-        and last.kind == "set_mode"
-        and last.mode != "off"
+    recent = (
+        memory.last_command_at is not None and now - memory.last_command_at < MIN_COMMAND_INTERVAL
     )
-    if (
-        rate_limited
-        and not completes_start
-        and memory.last_command_at is not None
-        and now - memory.last_command_at < MIN_COMMAND_INTERVAL
-    ):
+    if is_off:
+        # A safety off is never delayed, except that repeated offs are spaced so
+        # another writer flipping the mode back cannot make this a command storm.
+        limited = recent and last is not None and last.kind == "set_mode" and last.mode == "off"
+    else:
+        # A target sent right after its own start completes that start. The
+        # exemption is bounded in time; every other non-off command keeps spacing.
+        completes_start = (
+            command.kind == "set_temperature"
+            and last is not None
+            and last.kind == "set_mode"
+            and last.mode != "off"
+            and memory.last_command_at is not None
+            and now - memory.last_command_at < RETRY_SECONDS
+        )
+        limited = recent and not completes_start
+    if limited:
         return Plan(None, "rate_limited")
     return Plan(command, status)

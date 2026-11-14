@@ -26,8 +26,8 @@
           "filter_type": "Price filter",
           "deadband_sek_per_kwh": "Price deadband (SEK/kWh)",
           "sensitivity_c_per_sek_per_kwh": "Sensitivity (\u00b0C per SEK/kWh)",
-          "cold_tolerance": "Heat-on tolerance (\u00b0C)",
-          "hot_tolerance": "Heat-off tolerance (\u00b0C)",
+          "cold_tolerance": "Cold-side tolerance (\u00b0C): heating starts / cooling stops",
+          "hot_tolerance": "Warm-side tolerance (\u00b0C): heating stops / cooling starts",
           "min_cycle_seconds": "Minimum relay cycle / pump restart pause (seconds)",
           "max_sensor_age_minutes": "Maximum temperature sample age (minutes)",
           "control_type": "Control type",
@@ -53,7 +53,7 @@
       "already_configured": "This actuator already has a Price-Aware Thermostat instance.",
       "invalid_hvac_modes": "Select heat/cool modes supported by the backend, which must also support off.",
       "invalid_backend_limits": "The climate must support a target temperature and report finite, ordered temperature limits and a positive target step.",
-      "invalid_ac_settings": "Compensation must be within \u00b110 \u00b0C, delays within 0\u20133600 seconds and the price deviation 0\u201320 \u00b0C.",
+      "invalid_ac_settings": "Compensation must be within \u00b110 \u00b0C, the restart pause 60\u20133600 seconds, window delays 0\u20133600 seconds and the price deviation 0\u201320 \u00b0C.",
       "invalid_window_sensor": "Window/door contacts must be binary sensors."
     },
     "abort": {
@@ -75,8 +75,8 @@
           "filter_type": "Price filter",
           "deadband_sek_per_kwh": "Price deadband (SEK/kWh)",
           "sensitivity_c_per_sek_per_kwh": "Sensitivity (\u00b0C per SEK/kWh)",
-          "cold_tolerance": "Heat-on tolerance (\u00b0C)",
-          "hot_tolerance": "Heat-off tolerance (\u00b0C)",
+          "cold_tolerance": "Cold-side tolerance (\u00b0C): heating starts / cooling stops",
+          "hot_tolerance": "Warm-side tolerance (\u00b0C): heating stops / cooling starts",
           "min_cycle_seconds": "Minimum cycle / pump restart pause (seconds)",
           "shadow_mode": "Shadow mode (send no commands)",
           "safety_acknowledged": "I verified exclusive ownership of the controlled device and independent hardware safeguards",
@@ -95,7 +95,7 @@
     },
     "error": {
       "invalid_temperature_range": "Minimum must be no higher than base, and base must be no higher than maximum.",
-      "safety_confirmation_required": "Confirm safe ownership and hardware safeguards before enabling relay control.",
+      "safety_confirmation_required": "Confirm exclusive ownership and independent hardware safeguards before enabling live control.",
       "invalid_backend": "Select a valid actuator matching the control type; switch control supports heating only.",
       "invalid_room_sensor": "Select an available temperature sensor with a numeric reading and supported temperature unit.",
       "invalid_actuator": "Select an available actuator matching the control type.",
@@ -104,7 +104,7 @@
       "invalid_hvac_modes": "Select heat/cool modes supported by the backend, which must also support off.",
       "invalid_backend_limits": "The climate must support a target temperature and report finite, ordered temperature limits and a positive target step.",
       "actuator_handoff_required": "Before changing the actuator, save shadow mode, confirm the previous switch is off, and keep the new actuator in shadow mode.",
-      "invalid_ac_settings": "Compensation must be within \u00b110 \u00b0C, delays within 0\u20133600 seconds and the price deviation 0\u201320 \u00b0C.",
+      "invalid_ac_settings": "Compensation must be within \u00b110 \u00b0C, the restart pause 60\u20133600 seconds, window delays 0\u20133600 seconds and the price deviation 0\u201320 \u00b0C.",
       "invalid_window_sensor": "Window/door contacts must be binary sensors."
     }
   },

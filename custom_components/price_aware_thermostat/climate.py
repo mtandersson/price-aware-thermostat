@@ -28,6 +28,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
 from homeassistant.util import dt as dt_util
+from homeassistant.util.unit_conversion import TemperatureConverter, TemperatureDeltaConverter
 
 from .ac_control import (
     AcMode,
@@ -84,6 +85,13 @@ PRESET_FIXED = "fixed"
 # Serialize climate entity service calls; scheduled evaluations are also
 # coalesced per entity and guarded by an async lock.
 PARALLEL_UPDATES = 1
+
+
+# After a Home Assistant start the room sensor often loads after the wrapper.
+# A missing reading within this grace period does not turn a running pump off
+# (it would cost a compressor off/on cycle on every restart); afterwards it is
+# fail-closed as usual.
+STARTUP_GRACE_SECONDS = 120.0
 
 
 def _monotonic() -> float:
@@ -485,7 +493,8 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             ),
         )
         # Restart protection: the pause counts from the first observed off state.
-        self._memory = CommandMemory(off_since=_monotonic())
+        self._started_at = _monotonic()
+        self._memory = CommandMemory(off_since=self._started_at)
         self._demand_active = False
         self._first_evaluation = True
         self._intent = Intent("off", None, "startup")
@@ -506,6 +515,22 @@ class ClimateBackendThermostat(PriceAwareThermostat):
     def _tracked_entities(self) -> list[str]:
         return [self._sensor, self._heater, *self._windows]
 
+    # -- units -----------------------------------------------------------------
+    # Home Assistant shows climate limits and targets, and expects service
+    # temperatures, in the system unit. All internal values are Celsius.
+    def _to_celsius(self, value: float) -> float:
+        return TemperatureConverter.convert(
+            value, self.hass.config.units.temperature_unit, UnitOfTemperature.CELSIUS
+        )
+
+    def _from_celsius(self, value: float) -> float:
+        return round(
+            TemperatureConverter.convert(
+                value, UnitOfTemperature.CELSIUS, self.hass.config.units.temperature_unit
+            ),
+            4,
+        )
+
     # -- observation -----------------------------------------------------------
     def _observe(self) -> tuple[Observation, BackendLimits | None]:
         """Read what the underlying climate reports; never assume a command worked."""
@@ -517,16 +542,19 @@ class ClimateBackendThermostat(PriceAwareThermostat):
         modes = attrs.get("hvac_modes")
         supported = tuple(str(m) for m in modes) if isinstance(modes, (list, tuple)) else ()
         target: float | None
+        unit = self.hass.config.units.temperature_unit
         try:
-            target = float(attrs["temperature"])
-            target = target if isfinite(target) else None
+            raw_target = float(attrs["temperature"])
+            target = self._to_celsius(raw_target) if isfinite(raw_target) else None
         except (KeyError, TypeError, ValueError):
             target = None
         try:
             limits: BackendLimits | None = BackendLimits(
-                float(attrs["min_temp"]),
-                float(attrs["max_temp"]),
-                float(attrs.get("target_temp_step", 1.0)),
+                self._to_celsius(float(attrs["min_temp"])),
+                self._to_celsius(float(attrs["max_temp"])),
+                TemperatureDeltaConverter.convert(
+                    float(attrs.get("target_temp_step", 1.0)), unit, UnitOfTemperature.CELSIUS
+                ),
             )
         except (KeyError, TypeError, ValueError):
             limits = None
@@ -616,18 +644,23 @@ class ClimateBackendThermostat(PriceAwareThermostat):
                     "climate", "set_hvac_mode", data, blocking=True
                 )
             else:
-                data["temperature"] = command.target
+                assert command.target is not None
+                data["temperature"] = self._from_celsius(command.target)
                 await self.hass.services.async_call(
                     "climate", "set_temperature", data, blocking=True
                 )
-        except HomeAssistantError:
+        except Exception:
+            # Any backend failure (including non-HomeAssistantError exceptions from
+            # a third-party integration) is logged and bounded by the retry rules;
+            # it must not kill the evaluation worker or leave state unpublished.
+            # Cancellation is a BaseException and still propagates.
             _LOGGER.exception("Could not command the climate backend")
 
     def _snapshot(self) -> tuple[Any, ...]:
         return (
             self._attr_native_current_temperature, self._attr_hvac_action, self._last_result,
             self._sensor_fresh, self._intent, self._plan.status, self._observed,
-            self._window_status, self._in_sync,
+            self._window_status, self._in_sync, self._reported_action,
         )
 
     async def _async_evaluate(self) -> None:
@@ -640,11 +673,23 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             observed, limits = self._observe()
             self._observed = observed
             intent = self._decide(observed, limits, mono)
-            self._first_evaluation = False
+            if (
+                self._first_evaluation
+                and observed.available
+                and self._attr_native_current_temperature is not None
+            ):
+                # Only an evaluation that could see both the backend and the room
+                # may decide whether a running pump keeps its demand.
+                self._first_evaluation = False
             self._intent = intent
             plan = plan_next_command(
                 intent, observed, self._memory, limits, mono, float(self._min_cycle)
             )
+            if (
+                intent.reason == "room_temperature_unavailable"
+                and mono - self._started_at < STARTUP_GRACE_SECONDS
+            ):
+                plan = Plan(None, "startup_grace")
             self._plan = plan
             self._in_sync = observed.available and observed.mode == intent.mode and (
                 intent.mode == "off"
@@ -655,9 +700,12 @@ class ClimateBackendThermostat(PriceAwareThermostat):
                     and abs(observed.target - intent.native_target) <= limits.tolerance
                 )
             )
+            # Report what the backend says; only claim "off" when it really is off.
             self._attr_hvac_action = (
                 HVACAction.OFF
                 if self._attr_hvac_mode == HVACMode.OFF
+                and observed.available
+                and observed.mode == "off"
                 else self._reported_action
             )
             # Shadow mode computes the proposal but calls no climate or switch service.

@@ -17,6 +17,7 @@ from .const import (
     CONF_HEATER,
     CONF_HVAC_MODES,
     CONF_MAX_DEVIATION,
+    CONF_MIN_CYCLE,
     CONF_SENSOR,
     CONF_WINDOW_CLOSE_DELAY,
     CONF_WINDOW_OPEN_DELAY,
@@ -81,6 +82,11 @@ def validate_ac_settings(settings: dict[str, Any]) -> str | None:
         value = number(key, 0.0)
         if value is None or abs(value) > 10:
             return "invalid_ac_settings"
+    # The restart pause is the compressor's rest period in software: refuse to
+    # configure it away entirely.
+    pause = number(CONF_MIN_CYCLE, 300.0)
+    if pause is None or not 60 <= pause <= 3600:
+        return "invalid_ac_settings"
     for key in (CONF_WINDOW_OPEN_DELAY, CONF_WINDOW_CLOSE_DELAY):
         value = number(key, 0.0)
         if value is None or not 0 <= value <= 3600:

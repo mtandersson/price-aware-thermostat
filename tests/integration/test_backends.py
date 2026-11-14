@@ -227,6 +227,8 @@ async def test_climate_live_control_can_be_enabled_after_confirmation(hass: Home
     ({"window_close_delay_seconds": 4000}, "invalid_ac_settings"),
     ({"maximum_price_deviation": -0.1}, "invalid_ac_settings"),
     ({"maximum_price_deviation": float("nan")}, "invalid_ac_settings"),
+    ({"min_cycle_seconds": 30}, "invalid_ac_settings"),
+    ({"min_cycle_seconds": 7200}, "invalid_ac_settings"),
     ({"window_contacts": ["sensor.not_a_contact"]}, "invalid_window_sensor"),
     ({"window_contacts": "binary_sensor.window"}, "invalid_window_sensor"),
 ])
@@ -366,3 +368,21 @@ async def test_loaded_climate_options_reload_rebinds_without_commands(hass: Home
         assert hass.states.get("climate.room_ac").attributes["current_temperature"] == 19
         assert all(not group for group in calls)
         assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_switch_entries_do_not_store_heat_pump_settings(hass: HomeAssistant) -> None:
+    entities(hass)
+    hass.states.async_set("switch.storage", "off")
+    source = MockConfigEntry(domain="nordpool", data={"areas": ["SE4"]})
+    source.add_to_hass(hass)
+    flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    data = {**settings(source.entry_id), CONF_CONTROL_TYPE: CONTROL_SWITCH,
+            CONF_HEATER: "switch.storage", CONF_HVAC_MODES: ["heat"],
+            "heat_compensation": 2.0, "window_contacts": ["binary_sensor.window"],
+            "maximum_price_deviation": 0.5}
+    data.pop(CONF_SHADOW)
+    result = await hass.config_entries.flow.async_configure(flow["flow_id"], data)
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    for key in ("heat_compensation", "window_contacts", "maximum_price_deviation",
+                CONF_HVAC_MODES):
+        assert key not in result["data"]

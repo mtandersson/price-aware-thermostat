@@ -4,6 +4,7 @@ import unittest
 
 from custom_components.price_aware_thermostat.ac_control import (
     EXHAUSTED_COOLDOWN,
+    OFF_EXHAUSTED_COOLDOWN,
     MIN_COMMAND_INTERVAL,
     RETRY_SECONDS,
     BackendLimits,
@@ -253,6 +254,80 @@ class PlannerTests(unittest.TestCase):
             Intent("heat", 22.0), obs("off"), memory, LIMITS, 1000 + MIN_COMMAND_INTERVAL, 0.0
         )
         self.assertEqual(Command("set_mode", "heat"), later.command)
+
+    def test_new_command_after_exhaustion_gets_its_own_retries(self):
+        heat22 = Intent("heat", 22.0)
+        now = PAUSE
+        for _ in range(3):
+            self.memory.record(self.plan(heat22, obs("heat", 18.0), now).command, now)
+            now += RETRY_SECONDS
+        self.assertIsNotNone(self.memory.exhausted_at)
+        # A different target is a new episode: it is sent and retried normally.
+        first = self.plan(Intent("heat", 23.0), obs("heat", 18.0), now + MIN_COMMAND_INTERVAL)
+        self.assertEqual(Command("set_temperature", target=23.0), first.command)
+        self.memory.record(first.command, now + MIN_COMMAND_INTERVAL)
+        self.assertIsNone(self.memory.exhausted_at)
+        self.assertEqual(1, self.memory.attempts)
+        retry_at = now + MIN_COMMAND_INTERVAL + RETRY_SECONDS
+        retry = self.plan(Intent("heat", 23.0), obs("heat", 18.0), retry_at)
+        self.assertEqual(Command("set_temperature", target=23.0), retry.command)
+
+    def test_in_sync_closes_an_unacknowledged_episode(self):
+        heat = Intent("heat", 22.0)
+        self.memory.record(self.plan(heat, obs("off"), PAUSE).command, PAUSE)
+        self.memory.record(self.plan(heat, obs("off"), PAUSE + RETRY_SECONDS).command,
+                           PAUSE + RETRY_SECONDS)
+        self.assertEqual(2, self.memory.attempts)
+        # Hours of "off, in sync" end that episode.
+        self.assertEqual("in_sync", self.plan(Intent("off"), obs("off"), PAUSE + 7200).status)
+        self.assertEqual(0, self.memory.attempts)
+        later = PAUSE + 8000
+        fresh = self.plan(heat, obs("off"), later)
+        self.memory.record(fresh.command, later)
+        self.assertEqual(1, self.memory.attempts)
+        self.assertIsNone(self.memory.exhausted_at)
+
+    def test_target_exemption_is_bounded_in_time(self):
+        self.memory.record(Command("set_mode", "heat"), 1000)
+        late = self.plan(Intent("heat", 23.0), obs("heat", 22.0), 1000 + RETRY_SECONDS)
+        self.assertEqual(Command("set_temperature", target=23.0), late.command)  # spacing elapsed
+        self.memory.record(Command("set_mode", "heat"), 5000)
+        self.memory.last_command_at = 5000
+        shortly = self.plan(Intent("heat", 24.0), obs("heat", 22.0), 5030)
+        self.assertEqual(Command("set_temperature", target=24.0), shortly.command)
+        # Not right after the start any more and not yet spaced: limited.
+        self.memory.last_command = Command("set_temperature", target=24.0)
+        self.memory.last_command_at = 5030
+        self.assertEqual("rate_limited", self.plan(Intent("heat", 25.0), obs("heat", 22.0), 5040).status)
+
+    def test_repeated_offs_are_spaced_but_the_first_is_immediate(self):
+        run = Intent("off")
+        first = self.plan(run, obs("heat", 22.0), 1000)
+        self.assertEqual(Command("set_mode", "off"), first.command)
+        self.memory.record(first.command, 1000)
+        self.plan(run, obs("off"), 1001)  # acknowledged
+        # Another writer flips the pump back on right away: no immediate second off.
+        again = self.plan(run, obs("heat", 22.0), 1005)
+        self.assertEqual("rate_limited", again.status)
+        later = self.plan(run, obs("heat", 22.0), 1000 + MIN_COMMAND_INTERVAL)
+        self.assertEqual(Command("set_mode", "off"), later.command)
+
+    def test_failed_off_is_retried_sooner_than_a_failed_start(self):
+        off = Intent("off")
+        now = 1000.0
+        for _ in range(3):
+            result = self.plan(off, obs("heat", 22.0), now)
+            self.memory.record(result.command, now)
+            now += RETRY_SECONDS
+        self.assertEqual("retries_exhausted", self.plan(off, obs("heat", 22.0), now).status)
+        self.assertLess(OFF_EXHAUSTED_COOLDOWN, EXHAUSTED_COOLDOWN)
+        resumed = self.plan(off, obs("heat", 22.0), 1000 + 2 * RETRY_SECONDS + OFF_EXHAUSTED_COOLDOWN)
+        self.assertEqual(Command("set_mode", "off"), resumed.command)
+
+    def test_pump_is_never_started_without_a_target(self):
+        result = self.plan(Intent("heat", None), obs("off"), PAUSE)
+        self.assertIsNone(result.command)
+        self.assertEqual("invalid_backend_limits", result.status)
 
     def test_unavailable_backend_sends_nothing(self):
         for intent in (Intent("heat", 22.0), Intent("off")):

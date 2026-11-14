@@ -111,6 +111,17 @@ def _settings_schema(initial: dict[str, Any], *, options: bool) -> vol.Schema:
     return vol.Schema(config)
 
 
+_AC_KEYS = (
+    CONF_HEAT_COMPENSATION,
+    CONF_COOL_COMPENSATION,
+    CONF_MAX_DEVIATION,
+    CONF_WINDOW_SENSORS,
+    CONF_WINDOW_OPEN_DELAY,
+    CONF_WINDOW_CLOSE_DELAY,
+    CONF_HVAC_MODES,
+)
+
+
 def _ac_schema(initial: dict[str, Any]) -> dict[vol.Marker, Any]:
     """Settings that only apply to the heat-pump/AC control type."""
     # Optional, clearable fields use a suggested value (UI prefill) rather than a
@@ -188,11 +199,14 @@ class PriceAwareThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
                 # the same heater, including when installed in shadow mode.
                 await self.async_set_unique_id(user_input[CONF_HEATER])
                 self._abort_if_unique_id_configured()
+                kind = user_input.get(CONF_CONTROL_TYPE, CONTROL_SWITCH)
+                stored = {**user_input, CONF_AREA: area, CONF_CONTROL_TYPE: kind}
+                if kind != CONTROL_CLIMATE:
+                    # Heat-pump/AC settings do not apply to the switch type.
+                    for key in _AC_KEYS:
+                        stored.pop(key, None)
                 return self.async_create_entry(
-                    title=user_input[CONF_NAME],
-                    data={**user_input, CONF_AREA: area,
-                          CONF_CONTROL_TYPE: user_input.get(CONF_CONTROL_TYPE, CONTROL_SWITCH)},
-                    options={CONF_SHADOW: True},
+                    title=user_input[CONF_NAME], data=stored, options={CONF_SHADOW: True},
                 )
 
         schema = {

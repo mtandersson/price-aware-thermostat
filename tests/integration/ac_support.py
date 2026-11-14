@@ -77,9 +77,12 @@ class FakePump(ClimateEntity):
         self.calls: list[tuple[str, Any]] = []
         self.acknowledge = True
         self.fail = False
+        self.raise_value_error = False
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         self.calls.append(("mode", str(hvac_mode)))
+        if self.raise_value_error:
+            raise ValueError("simulated third-party integration bug")
         if self.fail:
             raise HomeAssistantError("simulated backend failure")
         if self.acknowledge:
@@ -203,6 +206,8 @@ async def ac_env(
     pump_mode: HVACMode = HVACMode.OFF,
     pump_target: float = 22.0,
     min_cycle: int = 0,
+    pump_available: bool = True,
+    pump_step: float | None = None,
     data: dict[str, Any] | None = None,
     options: dict[str, Any] | None = None,
     prices: tuple[Any, ...] = (),
@@ -212,6 +217,13 @@ async def ac_env(
     """Set up one AC wrapper around a fake pump and unload it afterwards."""
     clock = Clock()
     pump = await add_pump(hass, pump_mode, pump_target)
+    if pump_step is not None:
+        pump._attr_target_temperature_step = pump_step
+        pump.async_write_ha_state()
+    if not pump_available:
+        pump._attr_available = False
+        pump.async_write_ha_state()
+        await hass.async_block_till_done()
     if room is not None:
         hass.states.async_set(ROOM, room, {"unit_of_measurement": "°C"})
     for entity_id, state in (extra_states or {}).items():

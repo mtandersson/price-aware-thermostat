@@ -6,7 +6,9 @@ from unittest.mock import patch
 import pytest
 from homeassistant.components.climate import HVACMode
 from homeassistant.core import HomeAssistant
+from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
+from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
 from pytest_homeassistant.common import async_mock_service
 
 from custom_components.price_aware_thermostat.const import (
@@ -151,9 +153,9 @@ async def test_heat_to_cool_changeover_goes_through_off_and_pause(hass: HomeAssi
         assert env.calls()[-1] == ("mode", "off")  # restart pause after changeover
         assert env.attrs["pause_reason"] == "restart_pause"
         await env.advance(1)
-        assert env.calls()[-2:] == [("mode", "cool"), ("temp", 22.0)] or env.calls()[
-            -1
-        ] == ("mode", "cool")
+        # The pump's setpoint already equals the request, so only the mode is sent.
+        assert env.calls()[-1] == ("mode", "cool")
+        assert env.calls() == [("mode", "heat"), ("mode", "off"), ("mode", "cool")]
         assert env.pump.hvac_mode == HVACMode.COOL
 
 
@@ -273,6 +275,7 @@ async def test_invalid_room_temperature_turns_a_running_pump_off(
 ) -> None:
     async with ac_env(hass) as env:
         await env.set_mode("heat")
+        await env.advance(121)  # past the startup grace period
         await env.set_room(reading)
         assert env.calls()[-1] == ("mode", "off")
         assert env.attrs["intent_reason"] == "room_temperature_unavailable"
@@ -281,6 +284,7 @@ async def test_invalid_room_temperature_turns_a_running_pump_off(
 async def test_stale_room_temperature_turns_a_running_pump_off(hass: HomeAssistant) -> None:
     async with ac_env(hass, options={CONF_MAX_SENSOR_AGE: 30}) as env:
         await env.set_mode("heat")
+        await env.advance(121)  # past the startup grace period
         with patch(
             "custom_components.price_aware_thermostat.climate.is_temperature_sample_fresh",
             return_value=False,
@@ -383,9 +387,9 @@ async def test_cheap_now_lowers_the_cooling_target_and_raises_the_heating_target
 async def test_price_adjustment_changes_demand_not_only_the_pump_setpoint(
     hass: HomeAssistant,
 ) -> None:
-    # Room 22.4 would be satisfied by the base target 22.0 (22.4 > 22.3), but an
-    # expensive-now price lowers the heating target further: still no demand.
-    # With a cheap-now price the raised target (22.5) creates demand at 22.1.
+    # Room 22.1 is inside the hysteresis band of the base target (22.0), so with no
+    # prices there is no heating demand. A cheap-now price raises the effective
+    # heating target to 22.5, which creates demand at the same room temperature.
     async with ac_env(hass, room="22.1", prices=hourly_prices(0.0, 9.0),
                       options={CONF_MAX_DEVIATION: 0.5}) as env:
         await env.set_mode("heat")
@@ -403,6 +407,9 @@ async def test_price_adjustment_changes_demand_not_only_the_pump_setpoint(
 async def test_shadow_mode_never_sends_actuator_commands(
     hass: HomeAssistant, scenario: str
 ) -> None:
+    # Set the switch component up first, otherwise it replaces the mocked services
+    # when the integration (which depends on it) is set up.
+    assert await async_setup_component(hass, "switch", {})
     switch_calls = [async_mock_service(hass, "switch", s) for s in ("turn_on", "turn_off")]
     kwargs: dict[str, object] = {"shadow": True}
     if scenario == "cool_demand":
@@ -488,3 +495,134 @@ async def test_two_wrappers_regulate_independent_pumps(hass: HomeAssistant) -> N
         assert hass.states.get("climate.room_two").attributes["backend_entity_id"] == (
             "climate.pump_two"
         )
+
+
+# ---------------------------------------------------------- review follow-ups
+async def test_startup_grace_keeps_a_running_pump_until_the_sensor_loads(
+    hass: HomeAssistant,
+) -> None:
+    async with ac_env(
+        hass, room=None, pump_mode=HVACMode.HEAT, restore=("heat", {"preset_mode": "price_aware"})
+    ) as env:
+        assert env.calls() == []
+        assert env.attrs["command_status"] == "startup_grace"
+        await env.advance(60)
+        assert env.calls() == []  # still inside the grace period
+        await env.set_room("22.1")  # the sensor loads, inside the band: demand is kept
+        assert env.calls() == []
+        assert env.attrs["backend_in_sync"] is True
+
+
+async def test_missing_sensor_after_the_grace_period_fails_closed(hass: HomeAssistant) -> None:
+    async with ac_env(
+        hass, room=None, pump_mode=HVACMode.HEAT, restore=("heat", {"preset_mode": "price_aware"})
+    ) as env:
+        await env.advance(121)
+        assert env.calls() == [("mode", "off")]
+
+
+async def test_backend_loading_after_the_wrapper_keeps_a_running_pump(
+    hass: HomeAssistant,
+) -> None:
+    async with ac_env(
+        hass, room="22.1", pump_mode=HVACMode.HEAT, pump_available=False,
+        restore=("heat", {"preset_mode": "price_aware"}),
+    ) as env:
+        assert env.calls() == []
+        assert env.attrs["command_status"] == "backend_unavailable"
+        env.pump._attr_available = True
+        env.pump.async_write_ha_state()
+        await hass.async_block_till_done()
+        # The first evaluation that could see the backend still treats a running
+        # pump as having demand, so it is not pulsed off.
+        assert env.calls() == []
+        assert env.attrs["backend_in_sync"] is True
+
+
+async def test_unexpected_exception_from_the_backend_is_contained_and_bounded(
+    hass: HomeAssistant,
+) -> None:
+    async with ac_env(hass) as env:
+        env.pump.raise_value_error = True
+        await env.set_mode("heat")  # must not raise
+        assert env.attrs["command_status"] == "starting"
+        for _ in range(7):
+            await env.advance(120)
+        assert env.calls() == [("mode", "heat")] * 3
+        assert env.attrs["command_status"] == "retries_exhausted"
+        env.pump.raise_value_error = False
+        await env.advance(900)
+        assert env.pump.hvac_mode == HVACMode.HEAT
+
+
+async def test_wrapper_action_reflects_a_heating_backend_while_the_wrapper_is_off(
+    hass: HomeAssistant,
+) -> None:
+    async with ac_env(hass, shadow=True, pump_mode=HVACMode.HEAT) as env:
+        assert env.state().state == "off"
+        assert env.state().attributes.get("hvac_action") != "off"
+        env.pump._attr_hvac_action = "heating"
+        env.pump.async_write_ha_state()
+        await hass.async_block_till_done()
+        assert env.state().attributes["hvac_action"] == "heating"
+        assert env.attrs["backend_reported_hvac_action"] == "heating"
+        assert env.calls() == []
+
+
+async def test_wrapper_action_is_off_once_the_backend_is_really_off(hass: HomeAssistant) -> None:
+    async with ac_env(hass, shadow=True) as env:
+        assert env.state().attributes["hvac_action"] == "off"
+
+
+async def test_imperial_home_assistant_units_are_converted(hass: HomeAssistant) -> None:
+    hass.config.units = US_CUSTOMARY_SYSTEM
+    # Home Assistant reports limits in the system unit and the frontend reads the
+    # step in the system unit too, so a Fahrenheit system uses a Fahrenheit step.
+    async with ac_env(hass, room="25.0", pump_step=1.0) as env:
+        pump = hass.states.get(PUMP)
+        assert pump is not None
+        assert pump.attributes["min_temp"] == 50  # the backend reports Fahrenheit
+        await env.set_mode("cool")
+        assert env.calls()[0] == ("mode", "cool")
+        # Base target 22 degC is about 71.6 F. The pump must be commanded about
+        # 22 degC (nearest 1 F step: 72 F = 22.2 degC), not clamped to its minimum
+        # by comparing 22 with the Fahrenheit limit of 50.
+        assert env.pump.target_temperature == pytest.approx(22.0, abs=0.3)
+        attrs = env.attrs
+        assert attrs["proposed_native_target_c"] == pytest.approx(22.0, abs=0.3)
+        assert attrs["observed_native_target_c"] == pytest.approx(22.0, abs=0.3)
+        assert attrs["backend_in_sync"] is True
+
+
+async def test_restored_cool_mode_starts_cooling(hass: HomeAssistant) -> None:
+    async with ac_env(
+        hass, room="25.0", restore=("cool", {"preset_mode": "price_aware"})
+    ) as env:
+        assert env.state().state == "cool"
+        assert env.calls() == [("mode", "cool")]
+
+
+async def test_unacknowledged_start_is_not_replayed_after_manual_off(
+    hass: HomeAssistant,
+) -> None:
+    async with ac_env(hass) as env:
+        env.pump.acknowledge = False
+        await env.set_mode("heat")
+        assert env.calls() == [("mode", "heat")]
+        await env.set_mode("off")  # the start was never acknowledged and is now obsolete
+        env.pump.acknowledge = True
+        await env.advance(1200)
+        assert env.calls() == [("mode", "heat")]
+        assert env.pump.hvac_mode == HVACMode.OFF
+
+
+async def test_options_reload_keeps_a_running_pump_running(hass: HomeAssistant) -> None:
+    async with ac_env(hass) as env:
+        await env.set_mode("heat")
+        await env.set_room("22.1")  # inside the band: heating continues
+        assert env.calls() == [("mode", "heat")]
+        assert await hass.config_entries.async_reload(env.entry.entry_id)
+        await hass.async_block_till_done()
+        await env.advance(60)
+        assert env.state().state == "heat"
+        assert env.calls() == [("mode", "heat")]  # no off/on pulse across the reload
