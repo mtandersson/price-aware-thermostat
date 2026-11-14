@@ -16,8 +16,22 @@ release: HACS validation (unverified while the repository is
 private) and an install/upgrade/remove/rollback test in a disposable Home
 Assistant instance.
 
+### Changed
+
+- **Visible behaviour change for existing switch entries:** price pre-heating
+  is now capped at base + 0.8 °C, the default maximum price adjustment. Before,
+  only the maximum temperature limited it. Example: base 6.0 °C with maximum
+  7.5 °C used to pre-heat up to 7.5 °C and now pre-heats to at most 6.8 °C.
+  Expensive hours likewise lower the target by at most 0.8 °C. To widen it, set
+  **Maximum price adjustment** in the options, for example to 1.5 to reach 7.5
+  again. The minimum and maximum still apply as absolute limits. See
+  [docs/settings.md](docs/settings.md#maximum-price-deviation).
+
 ### Added
 
+- Field help texts for every setup, reconfigure and options field, a
+  [settings reference](docs/settings.md) with a worked price example, and a
+  Swedish translation.
 - Price adjustment is relative to the target set in the UI: effective target =
   target ± the maximum price adjustment (default 0.8 °C, now also for the switch
   type), then clamped to minimum/maximum, which are absolute safety and UI-range

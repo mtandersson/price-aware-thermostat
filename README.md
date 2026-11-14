@@ -61,6 +61,10 @@ This is a custom integration under development, not a graded Home Assistant Core
 
 ## How the optimizer works
 
+Every setting is explained, with defaults, ranges and a worked price example, in the [settings reference](docs/settings.md).
+
+> **Behaviour change for existing switch entries:** price pre-heating is now capped at base + 0.8 °C (the default *maximum price adjustment*). For example, base 6.0 °C with maximum 7.5 °C used to pre-heat up to 7.5 °C and now pre-heats to at most 6.8 °C. To widen it, raise **Maximum price adjustment** in the options, for example to 1.5. The maximum temperature still applies. See the [changelog](CHANGELOG.md).
+
 It compares the current price to a weighted mean of forecast intervals. The `triangle` filter favors nearer intervals, while `rectangle` weights all covered minutes equally. Calculations are duration-based and tolerate mixed interval lengths. In case of missing or invalid price forecasts, the base temperature is used. This fallback does **not** substitute for a hardwired safety thermostat.
 
 The normal target temperature displayed in the climate UI is the base setpoint; `effective_target_c` is the price-adjusted setpoint.

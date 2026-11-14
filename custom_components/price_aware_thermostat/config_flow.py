@@ -48,6 +48,7 @@ from .const import (
     CONTROL_SWITCH,
     DEFAULTS,
     DOMAIN,
+    SETTINGS_URL,
 )
 
 
@@ -427,4 +428,5 @@ class PriceAwareThermostatOptionsFlow(OptionsFlowWithReload):
             step_id="init",
             data_schema=vol.Schema(schema),
             errors=errors,
+            description_placeholders={"settings_url": SETTINGS_URL},
         )

@@ -8,6 +8,10 @@
         "data": {
           "nordpool_config_entry": "Price source (Nord Pool integration; future prices are fetched via its action)",
           "market_area": "Nord Pool market area (for example SE3)"
+        },
+        "data_description": {
+          "nordpool_config_entry": "The official Nord Pool integration entry that supplies electricity prices. Can be changed in live mode too, because it never commands the device.",
+          "market_area": "Price area to read from the Nord Pool source, for example SE3 or SE4. It must be one of the areas configured there."
         }
       },
       "user": {
@@ -38,6 +42,32 @@
           "window_contacts": "Window/door contacts (optional)",
           "window_open_delay_seconds": "Open longer than this pauses operation (seconds)",
           "window_close_delay_seconds": "Closed at least this long before resuming (seconds)"
+        },
+        "data_description": {
+          "name": "Display name of the new thermostat entity. Example: Garage heater.",
+          "temperature_sensor": "Room temperature sensor that the thermostat regulates against (\u00b0C, \u00b0F or K). Example: sensor.garage_temperature.",
+          "heater": "The switch (element type) or climate entity (heat pump/AC type) that this thermostat controls. Only one instance may control each device.",
+          "nordpool_config_entry": "The official Nord Pool integration entry that supplies electricity prices. Can be changed in live mode too, because it never commands the device.",
+          "market_area": "Price area to read from the Nord Pool source, for example SE3 or SE4. It must be one of the areas configured there.",
+          "base_temperature": "Your normal target in \u00b0C. Price adjustment moves the target around this value. Example: 6.0 for a frost-protected garage, 21 for a living room.",
+          "minimum_temperature": "Absolute safety floor in \u00b0C and the lowest setpoint allowed in the UI. Defaults to 5 for new entries.",
+          "maximum_temperature": "Absolute safety ceiling in \u00b0C and the highest setpoint allowed in the UI. Defaults to 25 for new entries.",
+          "lookahead_minutes": "How far ahead, in minutes, the current price is compared with upcoming prices. Example: 180 compares now with the next 3 hours.",
+          "filter_type": "How upcoming prices are averaged. Triangle weights the near future most and fades to zero at the end of the lookahead; rectangle weights every minute equally.",
+          "deadband_sek_per_kwh": "Price differences smaller than this (SEK/kWh) are ignored, and only the excess counts. Example: 0.20 means a 0.50 SEK/kWh difference acts as 0.30.",
+          "sensitivity_c_per_sek_per_kwh": "How many \u00b0C the target moves per SEK/kWh of price difference beyond the deadband. Example: 2.0 \u00d7 0.30 SEK/kWh = 0.6 \u00b0C.",
+          "cold_tolerance": "Hysteresis on the cold side in \u00b0C. Heating starts at or below target \u2212 this value; cooling stops there. Example: 0.3 with target 6.0 starts heating at 5.7 \u00b0C.",
+          "hot_tolerance": "Hysteresis on the warm side in \u00b0C. Heating stops at target + this value; cooling starts there. Example: 0.3 with target 6.0 stops heating at 6.3 \u00b0C.",
+          "min_cycle_seconds": "Minimum time in seconds between relay switches, or the restart pause for a heat pump (at least 60 s). Safety turn-offs are not delayed. Example: 300.",
+          "max_sensor_age_minutes": "A temperature reading older than this (minutes) counts as unavailable, and the device is turned off. Example: 60.",
+          "control_type": "Element/switch: turns a heating relay on and off. Heat pump/AC: sends mode and setpoint to an existing climate entity.",
+          "controlled_hvac_modes": "Which modes the thermostat offers and may command on the heat pump: heat, cool or both. The device must also support off.",
+          "heat_compensation": "\u00b0C added to the room target before it is sent as the pump setpoint while heating, because the pump measures at its own unit. Example: +2 sends 23 for a 21 \u00b0C target.",
+          "cool_compensation": "\u00b0C added to the room target before it is sent as the pump setpoint while cooling. Example: \u22121 sends 23 for a 24 \u00b0C target.",
+          "maximum_price_deviation": "Largest price adjustment, \u00b1 \u00b0C around your target, for all control types; min/max still apply. Example: 0.8 with target 21 keeps it within 20.2\u201321.8 \u00b0C. 0 turns price adjustment off.",
+          "window_contacts": "Binary sensors for windows or doors. When any one stays open, the heat pump is paused; unknown contacts neither pause nor resume it.",
+          "window_open_delay_seconds": "A contact must stay open this many seconds before the heat pump is turned off. Example: 120.",
+          "window_close_delay_seconds": "All contacts must stay closed this many seconds before operation resumes. Example: 60."
         }
       }
     },
@@ -65,7 +95,7 @@
     "step": {
       "init": {
         "title": "Thermostat settings",
-        "description": "Switching from shadow mode to live control requires a one-time safety confirmation; it is remembered until shadow mode is turned on again. Shadow mode calculates and shows proposed decisions without sending commands. The price source is the Nord Pool integration entry; future prices are fetched via its action. Price adjustment is relative to the target you set (\u00b1 the maximum price adjustment); minimum and maximum are absolute safety limits.",
+        "description": "Switching from shadow mode to live control requires a one-time safety confirmation; it is remembered until shadow mode is turned on again. Shadow mode calculates and shows proposed decisions without sending commands. The price source is the Nord Pool integration entry; future prices are fetched via its action. Price adjustment is relative to the target you set (\u00b1 the maximum price adjustment); minimum and maximum are absolute safety limits. Full explanation of every setting, with examples: {settings_url}",
         "data": {
           "base_temperature": "Base temperature (\u00b0C)",
           "minimum_temperature": "Minimum allowed target (\u00b0C, absolute safety limit)",
@@ -91,6 +121,32 @@
           "window_close_delay_seconds": "Closed at least this long before resuming (seconds)",
           "nordpool_config_entry": "Price source (Nord Pool integration; future prices are fetched via its action)",
           "market_area": "Nord Pool market area (for example SE3)"
+        },
+        "data_description": {
+          "base_temperature": "Your normal target in \u00b0C. Price adjustment moves the target around this value. Example: 6.0 for a frost-protected garage, 21 for a living room.",
+          "minimum_temperature": "Absolute safety floor in \u00b0C and the lowest setpoint allowed in the UI. Defaults to 5 for new entries.",
+          "maximum_temperature": "Absolute safety ceiling in \u00b0C and the highest setpoint allowed in the UI. Defaults to 25 for new entries.",
+          "lookahead_minutes": "How far ahead, in minutes, the current price is compared with upcoming prices. Example: 180 compares now with the next 3 hours.",
+          "filter_type": "How upcoming prices are averaged. Triangle weights the near future most and fades to zero at the end of the lookahead; rectangle weights every minute equally.",
+          "deadband_sek_per_kwh": "Price differences smaller than this (SEK/kWh) are ignored, and only the excess counts. Example: 0.20 means a 0.50 SEK/kWh difference acts as 0.30.",
+          "sensitivity_c_per_sek_per_kwh": "How many \u00b0C the target moves per SEK/kWh of price difference beyond the deadband. Example: 2.0 \u00d7 0.30 SEK/kWh = 0.6 \u00b0C.",
+          "cold_tolerance": "Hysteresis on the cold side in \u00b0C. Heating starts at or below target \u2212 this value; cooling stops there. Example: 0.3 with target 6.0 starts heating at 5.7 \u00b0C.",
+          "hot_tolerance": "Hysteresis on the warm side in \u00b0C. Heating stops at target + this value; cooling starts there. Example: 0.3 with target 6.0 stops heating at 6.3 \u00b0C.",
+          "min_cycle_seconds": "Minimum time in seconds between relay switches, or the restart pause for a heat pump (at least 60 s). Safety turn-offs are not delayed. Example: 300.",
+          "shadow_mode": "When on, decisions are calculated and shown but no commands are sent to the device. Turning it on again also clears the safety confirmation.",
+          "safety_acknowledged": "Asked once when you switch from shadow mode to live control: confirm that no other automation controls the device and that independent hardware protection (such as a thermal cutout) exists. Remembered until shadow mode is turned on again.",
+          "max_sensor_age_minutes": "A temperature reading older than this (minutes) counts as unavailable, and the device is turned off. Example: 60.",
+          "temperature_sensor": "Room temperature sensor that the thermostat regulates against (\u00b0C, \u00b0F or K). Example: sensor.garage_temperature.",
+          "heater": "The switch (element type) or climate entity (heat pump/AC type) that this thermostat controls. Only one instance may control each device.",
+          "controlled_hvac_modes": "Which modes the thermostat offers and may command on the heat pump: heat, cool or both. The device must also support off.",
+          "heat_compensation": "\u00b0C added to the room target before it is sent as the pump setpoint while heating, because the pump measures at its own unit. Example: +2 sends 23 for a 21 \u00b0C target.",
+          "cool_compensation": "\u00b0C added to the room target before it is sent as the pump setpoint while cooling. Example: \u22121 sends 23 for a 24 \u00b0C target.",
+          "maximum_price_deviation": "Largest price adjustment, \u00b1 \u00b0C around your target, for all control types; min/max still apply. Example: 0.8 with target 21 keeps it within 20.2\u201321.8 \u00b0C. 0 turns price adjustment off.",
+          "window_contacts": "Binary sensors for windows or doors. When any one stays open, the heat pump is paused; unknown contacts neither pause nor resume it.",
+          "window_open_delay_seconds": "A contact must stay open this many seconds before the heat pump is turned off. Example: 120.",
+          "window_close_delay_seconds": "All contacts must stay closed this many seconds before operation resumes. Example: 60.",
+          "nordpool_config_entry": "The official Nord Pool integration entry that supplies electricity prices. Can be changed in live mode too, because it never commands the device.",
+          "market_area": "Price area to read from the Nord Pool source, for example SE3 or SE4. It must be one of the areas configured there."
         }
       }
     },
@@ -131,7 +187,7 @@
   "issues": {
     "invalid_price_source": {
       "title": "The selected Nord Pool source needs attention",
-      "description": "The selected Nord Pool configuration was removed or no longer provides the configured market area. Check the official Nord Pool integration under Settings \u2192 Devices & services. Then enable shadow mode in this thermostat\u2019s options and use Reconfigure to select an existing Nord Pool configuration and one of its areas. Existing cached prices can remain in use until they expire; without usable prices the thermostat uses its base target. This issue clears on the next price refresh after the source is corrected. Do not change physical device ownership to fix a price source."
+      "description": "The selected Nord Pool configuration was removed or no longer provides the configured market area. Check the official Nord Pool integration under Settings \u2192 Devices & services. Then select an existing Nord Pool configuration and one of its areas, either with Reconfigure or in this thermostat\u2019s options. Both work in live mode too; shadow mode is not required. Existing cached prices can remain in use until they expire; without usable prices the thermostat uses its base target. This issue clears on the next price refresh after the source is corrected. Do not change physical device ownership to fix a price source."
     }
   },
   "entity": {

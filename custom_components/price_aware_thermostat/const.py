@@ -62,3 +62,7 @@ DEFAULTS: Final[dict[str, float | int | str | bool]] = {
     CONF_WINDOW_OPEN_DELAY: 120,
     CONF_WINDOW_CLOSE_DELAY: 60,
 }
+
+SETTINGS_URL: Final = (
+    "https://github.com/mtandersson/price-aware-thermostat/blob/main/docs/settings.md"
+)
