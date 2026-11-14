@@ -27,7 +27,8 @@
     "error": {
       "invalid_price_source": "Select a valid Nord Pool configuration entry.",
       "invalid_temperature_range": "The minimum temperature must be at or below the base temperature, which must be at or below the maximum.",
-      "invalid_entities": "The sensor and heater must be different entities."
+      "invalid_entities": "The sensor and heater must be different entities.",
+      "invalid_market_area": "Choose a market area configured in the selected Nord Pool integration."
     },
     "abort": {
       "already_configured": "This switch already has a Price-Aware Thermostat instance."
