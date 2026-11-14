@@ -1,9 +1,8 @@
 """Contract and cache tests for the official Nord Pool service adapter."""
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant.common import MockConfigEntry
 
@@ -21,16 +20,15 @@ async def test_fetches_each_day_once_and_converts_prices(hass: HomeAssistant) ->
         domain=DOMAIN,
         data={CONF_AREA: "SE4", CONF_NORDPOOL_ENTRY: "nordpool-test-entry"},
     )
-    requested = []
+    requested: list[str] = []
 
-    async def fake_action(domain, service, data, **kwargs):
-        assert domain == "nordpool"
-        assert service == "get_prices_for_date"
-        assert data["currency"] == "SEK"
-        assert data["areas"] == ["SE4"]
-        assert kwargs["return_response"] is True
-        requested.append(data["date"])
-        start = datetime.fromisoformat(data["date"]).replace(tzinfo=timezone.utc)
+    async def fake_action(call: ServiceCall) -> dict:
+        assert call.domain == "nordpool"
+        assert call.service == "get_prices_for_date"
+        assert call.data["currency"] == "SEK"
+        assert call.data["areas"] == ["SE4"]
+        requested.append(call.data["date"])
+        start = datetime.fromisoformat(call.data["date"]).replace(tzinfo=timezone.utc)
         return {
             "SE4": [
                 {
@@ -41,11 +39,14 @@ async def test_fetches_each_day_once_and_converts_prices(hass: HomeAssistant) ->
             ]
         }
 
+    hass.services.async_register(
+        "nordpool", "get_prices_for_date",
+        fake_action, supports_response=SupportsResponse.ONLY,
+    )
     coordinator = NordPoolPriceCoordinator(hass, entry)
-    with patch.object(hass.services, "async_call", side_effect=fake_action):
-        await coordinator.async_refresh()
-        initial_calls = len(requested)
-        await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    initial_calls = len(requested)
+    await coordinator.async_refresh()
     assert len(requested) == initial_calls
     assert initial_calls >= 1
     assert coordinator.data
@@ -53,18 +54,21 @@ async def test_fetches_each_day_once_and_converts_prices(hass: HomeAssistant) ->
 
 
 async def test_missing_prices_do_not_break_local_thermostat(hass: HomeAssistant) -> None:
-    """An unavailable price service returns an empty price forecast safely."""
+    """An unavailable price action returns an empty forecast safely."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={CONF_AREA: "SE4", CONF_NORDPOOL_ENTRY: "nordpool-test-entry"},
     )
+
+    async def unavailable(call: ServiceCall) -> None:
+        raise HomeAssistantError("Nord Pool unavailable")
+
+    hass.services.async_register(
+        "nordpool", "get_prices_for_date",
+        unavailable, supports_response=SupportsResponse.ONLY,
+    )
     coordinator = NordPoolPriceCoordinator(hass, entry)
-    with patch.object(
-        hass.services,
-        "async_call",
-        side_effect=HomeAssistantError("Nord Pool unavailable"),
-    ):
-        await coordinator.async_refresh()
-        assert coordinator.data == ()
-        await coordinator.async_refresh()
-        assert coordinator.data == ()
+    await coordinator.async_refresh()
+    assert coordinator.data == ()
+    await coordinator.async_refresh()
+    assert coordinator.data == ()
