@@ -18,13 +18,19 @@ See [control types and backend contract](docs/control-types.md) and, for the
 AC type, [evaluation, compatibility and migration](docs/ac-evaluation-and-migration.md).
 A synthetic, simulation-only [optimizer benchmark](docs/benchmark.md) is also available; it does not measure real savings.
 
-## HACS (not yet available)
+## Install as a custom repository
 
-The repository carries HACS metadata, but no release exists, HACS validation is
-unverified (the HACS check cannot run on a private repository) and HACS cannot
-add a private repository. Only after the owner makes the repository public and
-publishes a release could it be added as a custom repository of type
-**Integration**. See [release policy and procedures](docs/release.md).
+Home Assistant 2026.11 and newer includes HACS as **Marketplace**. Open
+**Settings → Marketplace → Custom repositories** (in the menu), add
+`https://github.com/mtandersson/price-aware-thermostat`, choose **Integration**,
+and install **Price-Aware Thermostat** from the default branch (`main`). Restart
+Home Assistant if prompted, then add the integration under Devices & services.
+Leave **Shadow mode** enabled during evaluation.
+
+The repository is public for custom installation. It has **not** been submitted
+to the default catalog, and no tagged release is required or published.
+Installation does not authorize taking over an existing heater or AC controller.
+See [installation and rollback](docs/release.md).
 
 ## Release status
 

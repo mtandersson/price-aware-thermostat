@@ -17,7 +17,7 @@ is evidence, not another implementation backlog.
 | --- | --- | --- |
 | action-setup | Not applicable | No custom actions are registered; the climate platform owns its standard actions. |
 | appropriate-polling | Implemented | `coordinator.py`: 15-minute refresh, per-day cache, one-hour current-day and 30-minute tomorrow retry cooldowns; `test_nordpool_cache_edges.py`. |
-| brands | Adapted | No Core brands registration is claimed for this private custom helper; public distribution validation stays in #9. |
+| brands | Adapted | No Core brands registration is claimed for this custom helper; public distribution validation stays in #9. |
 | common-modules | Implemented | Shared `coordinator.py`, `optimizer.py`, `control.py`, `relay_guard.py`, `ac_control.py`, `backends.py`; the single entity platform shares its base class in `climate.py`. |
 | config-flow | Implemented | UI setup, options and source/area reconfiguration, localized field/error descriptions; `test_flow.py`, `test_backends.py`, `test_quality_flow.py`. |
 | config-flow-test-coverage | Implemented | All executable lines and branches of `config_flow.py` covered; CI enforces both, including correction after source/backend errors and live price-source changes. |
@@ -90,7 +90,8 @@ is evidence, not another implementation backlog.
 Baseline before this audit: 317 tests, 22 subtests, 97% line coverage. The completed audit has 335 passing tests and 22 passing subtests, with
 97.47% combined line/branch coverage and 100% config-flow line/branch coverage.
 It adds source repair lifecycle/error recovery and stalled-service tests. CI also runs Ruff, strict mypy, Python 3.12/3.13 pure tests and
-hassfest. The HACS check is skipped for a private repository; that is not a pass.
+hassfest. At PR #37 the HACS check was skipped because the repository was private; that
+was not a pass. Public custom-repository validation now runs separately.
 
 The HA test harness enables event-loop debug and checks lingering tasks/timers.
 `test_event_coalescing.py` covers a 100-event burst and cancellation of in-flight
