@@ -4,10 +4,10 @@
     "step": {
       "reconfigure": {
         "title": "Change Nord Pool source",
-        "description": "Only the Nord Pool configuration and market area can be changed, and only while shadow mode is enabled. To change the sensor or heater, use the integration options.",
+        "description": "Change the Nord Pool price source and market area. This is allowed in live mode too: the price source never commands the heater or heat pump, and if prices cannot be fetched the thermostat falls back to its base target and shows a repair. The same fields are also available in the integration options.",
         "data": {
-          "nordpool_config_entry": "Nord Pool configuration",
-          "market_area": "Price market area"
+          "nordpool_config_entry": "Price source (Nord Pool integration; future prices are fetched via its action)",
+          "market_area": "Nord Pool market area (for example SE3)"
         }
       },
       "user": {
@@ -17,11 +17,11 @@
           "name": "Name",
           "temperature_sensor": "Temperature sensor",
           "heater": "Controlled switch or climate",
-          "nordpool_config_entry": "Nord Pool configuration",
-          "market_area": "Price market area",
+          "nordpool_config_entry": "Price source (Nord Pool integration; future prices are fetched via its action)",
+          "market_area": "Nord Pool market area (for example SE3)",
           "base_temperature": "Base temperature (\u00b0C)",
-          "minimum_temperature": "Minimum permitted temperature (\u00b0C)",
-          "maximum_temperature": "Maximum permitted temperature (\u00b0C)",
+          "minimum_temperature": "Minimum allowed target (\u00b0C, absolute safety limit)",
+          "maximum_temperature": "Maximum allowed target (\u00b0C, absolute safety limit)",
           "lookahead_minutes": "Price lookahead (minutes)",
           "filter_type": "Price filter",
           "deadband_sek_per_kwh": "Price deadband (SEK/kWh)",
@@ -34,7 +34,7 @@
           "controlled_hvac_modes": "Heat/cool modes to control (heat pump/AC)",
           "heat_compensation": "Heating compensation for the pump setpoint (\u00b0C)",
           "cool_compensation": "Cooling compensation for the pump setpoint (\u00b0C)",
-          "maximum_price_deviation": "Maximum price adjustment around the base target (\u00b0C, empty = limited only by min/max)",
+          "maximum_price_deviation": "Maximum price adjustment around your target (\u00b0C, default 0.8; 0 disables price adjustment)",
           "window_contacts": "Window/door contacts (optional)",
           "window_open_delay_seconds": "Open longer than this pauses operation (seconds)",
           "window_close_delay_seconds": "Closed at least this long before resuming (seconds)"
@@ -43,7 +43,7 @@
     },
     "error": {
       "invalid_price_source": "Select a valid Nord Pool configuration entry.",
-      "invalid_temperature_range": "The minimum temperature must be at or below the base temperature, which must be at or below the maximum.",
+      "invalid_temperature_range": "The minimum must be at or below the base temperature, which must be at or below the maximum, and the maximum price adjustment must be 0\u201320 \u00b0C.",
       "invalid_entities": "The sensor and heater must be different entities.",
       "invalid_market_area": "Choose a market area configured in the selected Nord Pool integration.",
       "invalid_backend": "Select a valid actuator matching the control type; switch control supports heating only.",
@@ -58,19 +58,18 @@
     },
     "abort": {
       "already_configured": "This actuator already has a Price-Aware Thermostat instance.",
-      "reconfigure_successful": "The Nord Pool source and market area were updated.",
-      "reconfigure_live_not_allowed": "Source reconfiguration is only allowed in shadow mode. Enable shadow mode in the options first."
+      "reconfigure_successful": "The Nord Pool source and market area were updated."
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Thermostat settings",
-        "description": "Switching from shadow mode to live control requires a one-time safety confirmation; it is remembered until shadow mode is turned on again. Shadow mode calculates and shows proposed decisions without sending commands.",
+        "description": "Switching from shadow mode to live control requires a one-time safety confirmation; it is remembered until shadow mode is turned on again. Shadow mode calculates and shows proposed decisions without sending commands. The price source is the Nord Pool integration entry; future prices are fetched via its action. Price adjustment is relative to the target you set (\u00b1 the maximum price adjustment); minimum and maximum are absolute safety limits.",
         "data": {
           "base_temperature": "Base temperature (\u00b0C)",
-          "minimum_temperature": "Minimum temperature (\u00b0C)",
-          "maximum_temperature": "Maximum temperature (\u00b0C)",
+          "minimum_temperature": "Minimum allowed target (\u00b0C, absolute safety limit)",
+          "maximum_temperature": "Maximum allowed target (\u00b0C, absolute safety limit)",
           "lookahead_minutes": "Price lookahead (minutes)",
           "filter_type": "Price filter",
           "deadband_sek_per_kwh": "Price deadband (SEK/kWh)",
@@ -86,15 +85,17 @@
           "controlled_hvac_modes": "Heat/cool modes to control (heat pump/AC)",
           "heat_compensation": "Heating compensation for the pump setpoint (\u00b0C)",
           "cool_compensation": "Cooling compensation for the pump setpoint (\u00b0C)",
-          "maximum_price_deviation": "Maximum price adjustment around the base target (\u00b0C, empty = limited only by min/max)",
+          "maximum_price_deviation": "Maximum price adjustment around your target (\u00b0C, default 0.8; 0 disables price adjustment)",
           "window_contacts": "Window/door contacts (optional)",
           "window_open_delay_seconds": "Open longer than this pauses operation (seconds)",
-          "window_close_delay_seconds": "Closed at least this long before resuming (seconds)"
+          "window_close_delay_seconds": "Closed at least this long before resuming (seconds)",
+          "nordpool_config_entry": "Price source (Nord Pool integration; future prices are fetched via its action)",
+          "market_area": "Nord Pool market area (for example SE3)"
         }
       }
     },
     "error": {
-      "invalid_temperature_range": "Minimum must be no higher than base, and base must be no higher than maximum.",
+      "invalid_temperature_range": "The minimum must be at or below the base temperature, which must be at or below the maximum, and the maximum price adjustment must be 0\u201320 \u00b0C.",
       "safety_confirmation_required": "Confirm exclusive ownership and independent hardware safeguards before enabling live control.",
       "invalid_backend": "Select a valid actuator matching the control type; switch control supports heating only.",
       "invalid_room_sensor": "Select an available temperature sensor with a numeric reading and supported temperature unit.",
@@ -131,6 +132,13 @@
     "invalid_price_source": {
       "title": "The selected Nord Pool source needs attention",
       "description": "The selected Nord Pool configuration was removed or no longer provides the configured market area. Check the official Nord Pool integration under Settings \u2192 Devices & services. Then enable shadow mode in this thermostat\u2019s options and use Reconfigure to select an existing Nord Pool configuration and one of its areas. Existing cached prices can remain in use until they expire; without usable prices the thermostat uses its base target. This issue clears on the next price refresh after the source is corrected. Do not change physical device ownership to fix a price source."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "price": {
+        "name": "Electricity price"
+      }
     }
   }
 }

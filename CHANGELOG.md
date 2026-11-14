@@ -18,6 +18,18 @@ Assistant instance.
 
 ### Added
 
+- Price adjustment is relative to the target set in the UI: effective target =
+  target ± the maximum price adjustment (default 0.8 °C, now also for the switch
+  type), then clamped to minimum/maximum, which are absolute safety and UI-range
+  limits with new-entry defaults of 5.0/25.0 °C. Config entry migration to 2.2
+  fills in the deviation and pins old implicit limits so existing entries never
+  widen.
+- Nord Pool price source and market area in the options flow, also in live
+  mode; Reconfigure no longer requires shadow mode (a price source never commands
+  the actuator). Clearer price-source labels.
+- An **Electricity price** sensor on a new per-entry device, showing the current
+  price used plus source entry, market area, weighted future price and freshness.
+
 - Bounded price-action (30 s) and switch/climate-action (10 s) waits, with
   cancellation and retry/corrective-OFF regressions (#12).
 - Engineering quality evidence for all 54 HA rules, actionable entry-specific

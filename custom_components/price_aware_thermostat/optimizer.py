@@ -35,8 +35,9 @@ class PriceInterval:
 @dataclass(frozen=True)
 class OptimizerConfig:
     base_temperature: float = 6.0
-    minimum_temperature: float = 5.3
-    maximum_temperature: float = 7.5
+    # Absolute safety limits (also the UI setpoint range in the integration).
+    minimum_temperature: float = 5.0
+    maximum_temperature: float = 25.0
     lookahead_minutes: int = 180
     filter_type: Filter = "triangle"
     deadband_sek_per_kwh: float = 0.20
@@ -47,9 +48,10 @@ class OptimizerConfig:
     # relatively expensive. Compensation for a device's native setpoint is
     # deliberately not part of the optimizer.
     hvac_mode: HvacMode = "heat"
-    # Optional symmetric limit around the base target, applied together with
-    # the absolute comfort bounds. None means only the absolute bounds apply.
-    max_deviation_c: float | None = None
+    # Symmetric limit on the price adjustment around the base target, applied
+    # before the absolute safety limits. None means only the absolute limits
+    # apply (kept for library callers; the integration always passes a number).
+    max_deviation_c: float | None = 0.8
 
     def __post_init__(self) -> None:
         floats = (

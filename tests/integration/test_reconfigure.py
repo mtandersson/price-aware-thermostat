@@ -1,4 +1,4 @@
-"""Shadow-only Nord Pool source reconfiguration through the real HA flow manager."""
+"""Nord Pool source reconfiguration through the real HA flow manager."""
 
 from datetime import date
 from unittest.mock import patch
@@ -179,43 +179,25 @@ async def test_reconfigure_rejects_invalid_source(
 
 
 @pytest.mark.parametrize("kind", [CONTROL_SWITCH, CONTROL_CLIMATE])
-async def test_reconfigure_rejected_while_live(
+async def test_reconfigure_allowed_while_live_without_actuation(
     hass: HomeAssistant, services: list[list], kind: str
 ) -> None:
-    old, _new = _sources(hass)
-    entry = _entry(hass, old, kind, shadow=False)
-    before = dict(entry.data)
-    with patch(UPDATE, return_value=()):
-        result = await _start(hass, entry)
-        coordinator = entry.runtime_data
-        assert result["type"] is FlowResultType.ABORT
-        assert result["reason"] == "reconfigure_live_not_allowed"
-        assert entry.runtime_data is coordinator
-        assert not any(services)
-        assert dict(entry.data) == before
-        assert entry.options == {CONF_SHADOW: False}
-        assert entry.state is ConfigEntryState.LOADED
-
-
-async def test_reconfigure_rechecks_live_on_submit(
-    hass: HomeAssistant, services: list[list]
-) -> None:
+    """A price source never commands the actuator, so live entries may change it."""
     old, new = _sources(hass)
-    entry = _entry(hass, old, CONTROL_SWITCH)
-    before = dict(entry.data)
+    entry = _entry(hass, old, kind, shadow=False)
     with patch(UPDATE, return_value=()):
         result = await _start(hass, entry)
-        coordinator = entry.runtime_data
         assert result["type"] is FlowResultType.FORM
-        hass.config_entries.async_update_entry(entry, options={CONF_SHADOW: False})
+        for call_list in services:
+            call_list.clear()
         result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], {CONF_NORDPOOL_ENTRY: new.entry_id, CONF_AREA: "SE3"}
+            result["flow_id"], {CONF_NORDPOOL_ENTRY: new.entry_id, CONF_AREA: " no1 "}
         )
         await hass.async_block_till_done()
-        assert result["type"] is FlowResultType.ABORT
-        assert result["reason"] == "reconfigure_live_not_allowed"
-        assert dict(entry.data) == before
-        assert entry.runtime_data is coordinator
+        assert result["reason"] == "reconfigure_successful"
+        assert entry.data[CONF_NORDPOOL_ENTRY] == new.entry_id
+        assert entry.data[CONF_AREA] == "NO1"
+        assert entry.options == {CONF_SHADOW: False}
         assert entry.state is ConfigEntryState.LOADED
     assert not any(services)
 
@@ -235,16 +217,6 @@ async def test_reconfigure_defaults_to_shadow_when_unset(hass: HomeAssistant) ->
         )
         assert result["reason"] == "reconfigure_successful"
         assert entry.data[CONF_AREA] == "SE3"
-
-
-async def test_reconfigure_options_override_shadow_in_data(hass: HomeAssistant) -> None:
-    old, _new = _sources(hass)
-    entry = _entry(hass, old, CONTROL_SWITCH, shadow=False)
-    hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_SHADOW: True})
-    with patch(UPDATE, return_value=()):
-        result = await _start(hass, entry)
-        assert result["type"] is FlowResultType.ABORT
-        assert result["reason"] == "reconfigure_live_not_allowed"
 
 
 async def test_reconfigure_source_without_areas_is_invalid_area(

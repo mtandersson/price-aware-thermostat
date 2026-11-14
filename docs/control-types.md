@@ -48,9 +48,10 @@ general (see [Ownership](#ownership-and-reconciliation)).
    shows. It persists across restarts.
 2. **Effective room target:** the price-adjusted demand target (`effective_target_c`).
    Cheap electricity raises it for heating and lowers it for cooling; expensive
-   electricity does the opposite. It stays within the minimum/maximum
-   temperatures and, if set, the **maximum price adjustment** around the base
-   target. `requested_adjustment_c` and `adjustment_clamped` show what pricing
+   electricity does the opposite. It is the base target ± at most the
+   **maximum price adjustment** (default 0.8 °C, 0 disables price adjustment),
+   then clamped to the minimum/maximum temperatures, which are absolute safety
+   limits and the UI setpoint range. `requested_adjustment_c` and `adjustment_clamped` show what pricing
    asked for before limits. The fixed preset bypasses price adjustment; missing,
    invalid or insufficient price data falls back to the base target and does
    **not** switch the pump off.
@@ -163,21 +164,35 @@ issue #7 and must state those assumptions.
 
 ## Reconfiguring the price source
 
-Use the integration's **Reconfigure** action to move an entry to a different
-Nord Pool config entry and/or market area. It is allowed only while shadow mode
-is enabled and changes nothing else: the sensor, actuator, control type and
-other settings stay as they are, and entry/entity IDs are preserved. The source
-must be a `nordpool` entry that offers the chosen area, and the entry reloads
-on success. To change the sensor or actuator, use the options flow instead. A
-live entry must first be switched to shadow mode in the options before it can be
-reconfigured. See issue #3 for the safety rationale.
+The Nord Pool config entry and market area can be changed in the options
+(**Configure**) together with the other settings, or on their own with the
+**Reconfigure** action. Both validate the same way: the source must be a
+`nordpool` entry that offers the chosen area. Both are allowed in live mode as
+well, because a price source never commands the actuator; it only changes the
+price signal, and a failing source falls back to the base target and raises a
+repair as before. The earlier shadow-only restriction on Reconfigure (issue #3)
+was therefore dropped. The source and area are stored in the entry data (not
+options) so there is a single source of truth, entry/entity IDs are preserved
+and the entry reloads. The options flow only validates the source when it is
+changed, so an unchanged broken source (already shown as a repair) never blocks
+other option changes such as enabling shadow mode.
+
+Each entry has a device with the climate entity and an **Electricity price**
+sensor (SEK/kWh): the current price used by the optimizer, with attributes
+`price_source_entry_id`, `price_source_title`, `market_area`,
+`future_weighted_price_sek_per_kwh`, `last_price_fetch`,
+`today_prices_cached`, `tomorrow_prices_cached`, `today_failure` and
+`tomorrow_failure`. It is re-evaluated on price updates and every five minutes
+on the clock, and its state is only written when something changed.
 
 ## Options
 
-Options can edit the sensor and actuator within the same control type, the AC
-modes, thermostat settings and the AC-only settings (compensation, price
-deviation, window contacts and delays). Changing control type requires a new
-entry. Leaving *Maximum price adjustment* or *Window contacts* empty clears them.
+Options can edit the price source and area, the sensor and actuator within the
+same control type, the AC modes, thermostat settings including the maximum price
+adjustment (both control types), and the AC-only settings (compensation, window
+contacts and delays). Changing control type requires a new entry. The maximum
+price adjustment is required (0–20 °C; set 0 to disable price adjustment) and
+cannot be left empty; leaving *Window contacts* empty clears them.
 Retargeting retains the wrapper entry/entity identity and updates the actuator
 unique ID used for duplicate detection. Options reload cancels the old worker.
 

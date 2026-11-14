@@ -129,7 +129,11 @@ def simulate(
     )  # fmt: skip
 
 
-BASE = OptimizerConfig(base_temperature=6.0, minimum_temperature=5.3, maximum_temperature=7.5)
+# Deviation disabled so results stay comparable with the published tables.
+BASE = OptimizerConfig(
+    base_temperature=6.0, minimum_temperature=5.3, maximum_temperature=7.5,
+    max_deviation_c=None,
+)
 FILTERS = ("rectangle", "triangle")
 LOOKAHEADS = (60, 180, 360)
 SENSITIVITIES = (1.0, 3.0)

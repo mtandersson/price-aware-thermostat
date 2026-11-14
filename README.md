@@ -43,6 +43,7 @@ and rollback procedures, and the license information are in
 - Configurable maximum age for temperature sensor reports (default: 60 minutes). Stale or unavailable readings disable automatic heat demand; independent hardware frost protection remains essential.
 - Price-aware or fixed-temperature presets and explicit heat/off modes.
 - UI-based setup and options flow, English UI strings, diagnostics in climate attributes, and downloadable diagnostics with price-cache freshness and failure kinds.
+- The Nord Pool price source and market area are shown and editable in the options, also in live mode, and an **Electricity price** sensor on the thermostat device shows the current price used, its source entry, market area, weighted future price and cache freshness.
 - A default **read-only shadow mode** for side-by-side evaluation before commissioning.
 
 ## Development installation
@@ -64,7 +65,7 @@ It compares the current price to a weighted mean of forecast intervals. The `tri
 
 The normal target temperature displayed in the climate UI is the base setpoint; `effective_target_c` is the price-adjusted setpoint.
 
-The optimizer supports heating and cooling. Heating raises the target while electricity is relatively cheap and lowers it while expensive; cooling mirrors this (lower target when cheap, higher when expensive). Adjustments stay within the configured comfort limits and, optionally, a maximum deviation around the base target. `requested_adjustment_c` shows what the price signal asked for before limits and `adjustment_clamped` shows when limits reduced or removed it, so a target equal to the base is still explainable. Both are neutral (`0.0` / `false`) in the fixed preset and when off. The switch controller is heating-only; cooling applies to the heat-pump/AC control type.
+The optimizer supports heating and cooling. Heating raises the target while electricity is relatively cheap and lowers it while expensive; cooling mirrors this (lower target when cheap, higher when expensive). Price adjustment is **relative to the target you set**: the effective target is your target ± at most the *maximum price adjustment* (default 0.8 °C; 0 disables price adjustment), then clamped to the minimum/maximum temperatures. Minimum and maximum (new-entry defaults 5.0/25.0 °C) are absolute safety limits and the allowed setpoint range in the UI; they no longer define the size of the price adjustment. `requested_adjustment_c` shows what the price signal asked for before limits and `adjustment_clamped` shows when limits reduced or removed it, so a target equal to the base is still explainable. Both are neutral (`0.0` / `false`) in the fixed preset and when off. The switch controller is heating-only; cooling applies to the heat-pump/AC control type.
 
 ## Staging validation, troubleshooting and removal
 

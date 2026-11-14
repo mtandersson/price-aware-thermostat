@@ -35,6 +35,7 @@ class OptimizerTests(unittest.TestCase):
             lookahead_minutes=60,
             deadband_sek_per_kwh=0.1,
             sensitivity_c_per_sek_per_kwh=2.0,
+            max_deviation_c=None,  # these tests exercise the absolute limits
         )
 
     def test_cheap_now_preheats(self):

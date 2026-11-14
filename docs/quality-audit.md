@@ -20,7 +20,7 @@ is evidence, not another implementation backlog.
 | brands | Adapted | No Core brands registration is claimed for this private custom helper; public distribution validation stays in #9. |
 | common-modules | Implemented | Shared `coordinator.py`, `optimizer.py`, `control.py`, `relay_guard.py`, `ac_control.py`, `backends.py`; the single entity platform shares its base class in `climate.py`. |
 | config-flow | Implemented | UI setup, options and source/area reconfiguration, localized field/error descriptions; `test_flow.py`, `test_backends.py`, `test_quality_flow.py`. |
-| config-flow-test-coverage | Implemented | All executable lines and branches of `config_flow.py` covered; CI enforces both, including correction after source/backend errors and the live-reconfigure race. |
+| config-flow-test-coverage | Implemented | All executable lines and branches of `config_flow.py` covered; CI enforces both, including correction after source/backend errors and live price-source changes. |
 | dependency-transparency | Implemented | Manifest dependencies are built-in HA platforms; `after_dependencies` orders official Nord Pool. No direct external HTTP client or Python runtime requirements. Dev dependencies are explicit in `pyproject.toml`/`uv.lock`. |
 | docs-actions | Not applicable | No integration-specific actions; standard climate commands are described in `control-types.md`. |
 | docs-conditions | Not applicable | No integration-specific conditions. |
@@ -73,7 +73,7 @@ is evidence, not another implementation backlog.
 | entity-translations | Adapted | The helper's name is explicitly user supplied; no hard-coded generated device/entity name is translated. Config/options/selectors/errors use `strings.json` and `translations/en.json`. English is the supported language. |
 | exception-translations | Implemented | All user-facing climate setter errors carry translation keys/placeholders; parity and exception tests. |
 | icon-translations | Not applicable | No integration-specific icons; climate frontend presentation uses standard HVAC semantics. |
-| reconfiguration-flow | Implemented | Source/area changes only in shadow, rechecked on submit; settings/options retain entity identity. `test_reconfigure.py`. |
+| reconfiguration-flow | Implemented | Source/area changes via Reconfigure or options, also live (no actuator command); settings/options retain entity identity. `test_reconfigure.py`, `test_price_source_ui.py`. |
 | repair-issues | Implemented | Entry-bound actionable warning for deleted/wrong source or removed market area. Valid configuration clears it even during API cooldown; transient outages do not create a repair. `test_price_source_repairs.py`. |
 | stale-devices | Not applicable | No physical device registry records owned by this integration. |
 
