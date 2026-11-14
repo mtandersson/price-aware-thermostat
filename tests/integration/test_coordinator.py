@@ -1,6 +1,6 @@
 """Contract and cache tests for the official Nord Pool service adapter."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError
@@ -28,7 +28,7 @@ async def test_fetches_each_day_once_and_converts_prices(hass: HomeAssistant) ->
         assert call.data["currency"] == "SEK"
         assert call.data["areas"] == ["SE4"]
         requested.append(call.data["date"])
-        start = datetime.fromisoformat(call.data["date"]).replace(tzinfo=timezone.utc)
+        start = datetime.fromisoformat(call.data["date"]).replace(tzinfo=UTC)
         return {
             "SE4": [
                 {
