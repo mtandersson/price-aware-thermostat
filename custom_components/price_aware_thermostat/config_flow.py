@@ -59,7 +59,9 @@ def _number(minimum: float, maximum: float, step: float = 0.1) -> selector.Numbe
     )
 
 
-def _settings_schema(initial: dict[str, Any], *, options: bool) -> vol.Schema:
+def _settings_schema(
+    initial: dict[str, Any], *, options: bool, min_cycle_floor: float = 0
+) -> vol.Schema:
     """Build the shared optimizer/thermostat settings."""
     config: dict[vol.Marker, Any] = {
         vol.Required(
@@ -95,7 +97,7 @@ def _settings_schema(initial: dict[str, Any], *, options: bool) -> vol.Schema:
         ): _number(0, 5),
         vol.Required(
             CONF_MIN_CYCLE, default=initial.get(CONF_MIN_CYCLE, DEFAULTS[CONF_MIN_CYCLE])
-        ): _number(0, 3600, 30),
+        ): _number(min_cycle_floor, 3600, 30),
         vol.Required(
             CONF_MAX_SENSOR_AGE,
             default=initial.get(CONF_MAX_SENSOR_AGE, DEFAULTS[CONF_MAX_SENSOR_AGE]),
@@ -340,7 +342,9 @@ class PriceAwareThermostatOptionsFlow(OptionsFlowWithReload):
                     )
                 return self.async_create_entry(data=updated)
 
-        schema = _settings_schema(values, options=True).schema.copy()
+        schema = _settings_schema(
+            values, options=True, min_cycle_floor=60 if climate_backend else 0
+        ).schema.copy()
         if CONF_HEATER in values:
             kind = values.get(CONF_CONTROL_TYPE, CONTROL_SWITCH)
             schema.update({

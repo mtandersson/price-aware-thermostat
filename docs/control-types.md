@@ -78,9 +78,9 @@ changed price) is never replayed.
 | Start | `set_hvac_mode` to the wanted mode, then `set_temperature` if the target differs. |
 | Minimum restart pause | After the backend is observed off (and after a Home Assistant restart, counted from the first observation) a start waits for *Minimum cycle / pump restart pause*. |
 | Heat ↔ cool changeover | Always goes through off: off, restart pause, then the other mode. A foreign mode (for example `auto`) is treated the same way. |
-| Command spacing | Commands other than off, and other than a target sent within two minutes of its own start, are at least 60 s apart. A first off is never delayed; repeated offs are at least 60 s apart so another writer flipping the mode back cannot cause a command storm. The restart pause must be at least 60 s. |
+| Command spacing | Commands other than off, and other than a target sent right after its own start, are at least 60 s apart. A first off is never delayed; repeated offs are at least 60 s apart so another writer flipping the mode back cannot cause a command storm. The restart pause must be at least 60 s when configured; an entry stored earlier with a smaller value keeps it until its options are next saved. |
 | Acknowledgment | Only the backend's observed mode/target acknowledges a command, with half a target step of tolerance for rounding. A successful service call alone is not an acknowledgment. |
-| Retries | An unacknowledged or failed command is retried after 120 s, at most three times, then paused (`retries_exhausted`): 15 minutes for a start or target change, 5 minutes for a safety off. A different command, or reaching "in sync", starts a fresh count. |
+| Retries | An unacknowledged or failed command is retried after 120 s, at most three times, then paused (`retries_exhausted`): 15 minutes for a start or target change, 5 minutes for a safety off. A different command, or reaching "in sync", starts a fresh count, so a pump that ignores commands combined with a rapidly flipping demand is limited by the 60 s spacing rather than the three-attempt bound. |
 | Start without a target | A pump is never started unless a native target is known; if the backend reports no valid limits, `command_status` is `invalid_backend_limits`. |
 | Wrapper set to off | The backend is commanded off. **Enabling live control while the wrapper is off therefore turns the pump off**; choose a mode first if the pump should keep running. |
 | Room temperature unavailable, invalid or stale | Fail-closed: off. Independent protection in the device remains essential. For the first two minutes after the wrapper starts, a missing reading does not turn a running pump off (`command_status: startup_grace`), because the sensor often loads after the wrapper; this avoids a compressor off/on cycle on every restart. |
@@ -107,9 +107,14 @@ not detected. Any open contact wins over unknown ones.
 Home Assistant reports a climate's limits and target, and expects service
 temperatures, in its system unit. The controller converts to and from Celsius
 internally; the `*_c` attributes are Celsius. The backend's target step is read
-as being in the system unit, as the Home Assistant frontend does. A backend whose
-step attribute is not in the system unit may be commanded to a slightly different
-grid value than intended (the backend rounds it itself).
+as being in the system unit, as the Home Assistant frontend does. Home Assistant
+also displays the backend's limits and target rounded to whole degrees
+Fahrenheit (tenths of a degree Celsius), so the acknowledgment tolerance includes
+half of that display unit, and on a Fahrenheit system targets stay half a degree
+inside the reported limits (a displayed maximum can round past the real one and
+be rejected on write). A backend whose step attribute is not in the system unit
+may be commanded to a slightly different grid value than intended; the backend
+rounds it itself and the tolerance still acknowledges it.
 
 ### Ownership and reconciliation
 

@@ -57,6 +57,31 @@ class NativeTargetTests(unittest.TestCase):
             BackendLimits(10, 30, 0)
 
 
+class DisplayRoundingTests(unittest.TestCase):
+    def test_readback_widens_the_acknowledgment_tolerance(self):
+        plain = BackendLimits(10, 31, 0.5)
+        coarse = BackendLimits(10, 31, 0.5, readback=0.278)
+        self.assertAlmostEqual(0.25, plain.tolerance, places=3)
+        self.assertAlmostEqual(0.528, coarse.tolerance, places=3)
+
+    def test_margin_keeps_targets_inside_coarsely_displayed_limits(self):
+        # 31 degC is displayed as 88 F = 31.11 degC; writing above 31 is rejected.
+        limits = BackendLimits(10, 31.11, 0.5556, readback=0.278, margin=0.278)
+        self.assertLessEqual(native_target(40, 0, limits), 31.0)
+        self.assertGreaterEqual(native_target(0, 0, limits), 10.278 - 1e-9)
+
+    def test_grid_stays_anchored_at_the_reported_minimum(self):
+        limits = BackendLimits(10, 31, 0.5, readback=0.05)
+        self.assertEqual(22.0, native_target(22.0, 0, limits))
+        self.assertEqual(31.0, native_target(35, 0, limits))
+
+    def test_invalid_margin_is_rejected(self):
+        with self.assertRaises(ValueError):
+            BackendLimits(10, 10.4, 0.5, margin=0.3)
+        with self.assertRaises(ValueError):
+            BackendLimits(10, 31, 0.5, readback=-1)
+
+
 class DemandTests(unittest.TestCase):
     def test_heating_hysteresis(self):
         # Start at or below target - cold (20.7); stop at or above target + hot (21.3).
@@ -287,18 +312,22 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(1, self.memory.attempts)
         self.assertIsNone(self.memory.exhausted_at)
 
-    def test_target_exemption_is_bounded_in_time(self):
+    def test_target_exemption_applies_only_right_after_a_start(self):
+        # Right after a start the target is sent at once.
         self.memory.record(Command("set_mode", "heat"), 1000)
-        late = self.plan(Intent("heat", 23.0), obs("heat", 22.0), 1000 + RETRY_SECONDS)
-        self.assertEqual(Command("set_temperature", target=23.0), late.command)  # spacing elapsed
-        self.memory.record(Command("set_mode", "heat"), 5000)
-        self.memory.last_command_at = 5000
-        shortly = self.plan(Intent("heat", 24.0), obs("heat", 22.0), 5030)
-        self.assertEqual(Command("set_temperature", target=24.0), shortly.command)
-        # Not right after the start any more and not yet spaced: limited.
-        self.memory.last_command = Command("set_temperature", target=24.0)
-        self.memory.last_command_at = 5030
-        self.assertEqual("rate_limited", self.plan(Intent("heat", 25.0), obs("heat", 22.0), 5040).status)
+        right_after = self.plan(Intent("heat", 23.0), obs("heat", 22.0), 1001)
+        self.assertEqual(Command("set_temperature", target=23.0), right_after.command)
+        # After a target command (not a start) the spacing applies.
+        self.memory.record(Command("set_temperature", target=23.0), 2000)
+        self.assertEqual(
+            "rate_limited", self.plan(Intent("heat", 24.0), obs("heat", 23.0), 2001).status
+        )
+        # After an off command a start also keeps the spacing.
+        self.memory.record(Command("set_mode", "off"), 3000)
+        result = plan_next_command(
+            Intent("heat", 22.0), obs("off"), self.memory, LIMITS, 3001, 0.0
+        )
+        self.assertEqual("rate_limited", result.status)
 
     def test_repeated_offs_are_spaced_but_the_first_is_immediate(self):
         run = Intent("off")

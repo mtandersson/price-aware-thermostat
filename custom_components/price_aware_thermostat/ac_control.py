@@ -30,36 +30,62 @@ OFF_EXHAUSTED_COOLDOWN = 300.0
 
 @dataclass(frozen=True)
 class BackendLimits:
-    """Temperature limits and step reported by the underlying climate."""
+    """Temperature limits and step reported by the underlying climate (Celsius).
+
+    The step grid is anchored at ``minimum``. ``readback`` is the largest error
+    Home Assistant's display rounding can add when the backend's state is read
+    back (half its display unit); it is part of the acknowledgment tolerance so a
+    correctly applied target is never reported as unacknowledged. ``margin``
+    keeps commanded targets inside the limits by that much when the displayed
+    limits are coarse (whole degrees Fahrenheit can round a limit outward and a
+    write beyond the real limit is rejected).
+    """
 
     minimum: float
     maximum: float
     step: float
+    readback: float = 0.0
+    margin: float = 0.0
 
     def __post_init__(self) -> None:
-        if not all(isfinite(v) for v in (self.minimum, self.maximum, self.step)):
+        values = (self.minimum, self.maximum, self.step, self.readback, self.margin)
+        if not all(isfinite(v) for v in values):
             raise ValueError("Backend limits must be finite")
-        if self.minimum >= self.maximum or self.step <= 0:
+        if (
+            self.step <= 0
+            or self.readback < 0
+            or self.margin < 0
+            or self.minimum + 2 * self.margin >= self.maximum
+        ):
             raise ValueError("Backend limits must be ordered with a positive step")
 
     @property
     def tolerance(self) -> float:
-        """Rounding tolerance when comparing a commanded and an observed target."""
-        return self.step / 2.0 + 1e-6
+        """Tolerance when comparing a commanded and an observed target."""
+        return self.step / 2.0 + self.readback + 1e-6
 
 
 def native_target(effective_room_target: float, compensation: float, limits: BackendLimits) -> float:
     """Map the effective room target to a supported pump setpoint.
 
     Compensation is signed and configured separately per mode. The result is
-    clamped to the backend limits and rounded to its step, measured from the
-    minimum so devices with offset grids are respected.
+    clamped to the backend limits (inside the safety margin) and rounded to its
+    step, measured from the reported minimum so devices with offset grids are
+    respected.
     """
     if not isfinite(effective_room_target) or not isfinite(compensation):
         raise ValueError("Targets and compensation must be finite")
-    raw = min(limits.maximum, max(limits.minimum, effective_room_target + compensation))
+    lower = limits.minimum + limits.margin
+    upper = limits.maximum - limits.margin
+    raw = min(upper, max(lower, effective_room_target + compensation))
     steps = floor((raw - limits.minimum) / limits.step + 0.5)
-    value = min(limits.maximum, limits.minimum + steps * limits.step)
+    value = limits.minimum + steps * limits.step
+    while value > upper + 1e-9:
+        steps -= 1
+        value = limits.minimum + steps * limits.step
+    while value < lower - 1e-9:
+        steps += 1
+        value = limits.minimum + steps * limits.step
     return round(value, 4)
 
 
@@ -347,15 +373,14 @@ def _throttle(command: Command, memory: CommandMemory, now: float, status: str) 
         # another writer flipping the mode back cannot make this a command storm.
         limited = recent and last is not None and last.kind == "set_mode" and last.mode == "off"
     else:
-        # A target sent right after its own start completes that start. The
-        # exemption is bounded in time; every other non-off command keeps spacing.
+        # A target sent right after its own start completes that start. Because
+        # `recent` already limits this to the spacing window, no other command gets
+        # the exemption; every other non-off command keeps the minimum spacing.
         completes_start = (
             command.kind == "set_temperature"
             and last is not None
             and last.kind == "set_mode"
             and last.mode != "off"
-            and memory.last_command_at is not None
-            and now - memory.last_command_at < RETRY_SECONDS
         )
         limited = recent and not completes_start
     if limited:

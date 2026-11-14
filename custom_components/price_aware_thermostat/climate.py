@@ -548,6 +548,15 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             target = self._to_celsius(raw_target) if isfinite(raw_target) else None
         except (KeyError, TypeError, ValueError):
             target = None
+        # Home Assistant displays limits and targets rounded to its display unit
+        # (whole degrees Fahrenheit, tenths of a degree Celsius). That rounding is
+        # added to the acknowledgment tolerance. Whole-degree Fahrenheit can round a
+        # limit outward, and a write beyond the real limit is rejected, so targets
+        # also keep half a display unit inside the limits there. Celsius limits are
+        # displayed exactly enough that the grid and range are left untouched.
+        fahrenheit = unit == UnitOfTemperature.FAHRENHEIT
+        half_unit = 0.5 if fahrenheit else 0.05
+        readback = TemperatureDeltaConverter.convert(half_unit, unit, UnitOfTemperature.CELSIUS)
         try:
             limits: BackendLimits | None = BackendLimits(
                 self._to_celsius(float(attrs["min_temp"])),
@@ -555,6 +564,8 @@ class ClimateBackendThermostat(PriceAwareThermostat):
                 TemperatureDeltaConverter.convert(
                     float(attrs.get("target_temp_step", 1.0)), unit, UnitOfTemperature.CELSIUS
                 ),
+                readback,
+                readback if fahrenheit else 0.0,
             )
         except (KeyError, TypeError, ValueError):
             limits = None

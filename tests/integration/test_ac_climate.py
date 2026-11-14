@@ -626,3 +626,40 @@ async def test_options_reload_keeps_a_running_pump_running(hass: HomeAssistant) 
         await env.advance(60)
         assert env.state().state == "heat"
         assert env.calls() == [("mode", "heat")]  # no off/on pulse across the reload
+
+
+async def test_celsius_backend_on_a_fahrenheit_system_is_acknowledged_without_looping(
+    hass: HomeAssistant,
+) -> None:
+    # The unmodified fake: a Celsius-native pump with a 0.5 step, read back by
+    # Home Assistant rounded to whole degrees Fahrenheit.
+    hass.config.units = US_CUSTOMARY_SYSTEM
+    async with ac_env(hass, room="25.0") as env:
+        await env.set_mode("cool")
+        for _ in range(4):
+            await env.advance(120)
+        attrs = env.attrs
+        assert attrs["backend_in_sync"] is True
+        assert attrs["command_status"] == "in_sync"
+        assert len([c for c in env.calls() if c[0] == "temp"]) <= 1
+        assert env.pump.target_temperature == pytest.approx(22.0, abs=0.6)
+
+
+async def test_target_at_the_backend_maximum_is_accepted_on_a_fahrenheit_system(
+    hass: HomeAssistant,
+) -> None:
+    # 31 degC is displayed as 88 F, which converts back to 31.11: above the real
+    # maximum. The command must stay inside the real limit or Home Assistant
+    # rejects it on every attempt.
+    hass.config.units = US_CUSTOMARY_SYSTEM
+    async with ac_env(
+        hass, room="15.0", pump_step=1.0, data={CONF_HEAT_COMPENSATION: 10.0}
+    ) as env:
+        await env.set_mode("heat")
+        for _ in range(3):
+            await env.advance(120)
+        assert env.pump.hvac_mode == HVACMode.HEAT
+        assert env.pump.target_temperature <= 31.0
+        assert env.pump.target_temperature >= 30.0
+        assert env.attrs["backend_in_sync"] is True
+        assert env.attrs["command_status"] == "in_sync"
