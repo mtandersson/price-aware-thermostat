@@ -24,10 +24,12 @@ days, with provable zero commands.
    throw-away backup) with no access to real devices.
 2. Provide a stand-in backend climate: for example a climate from Home
    Assistant's `demo` integration, or any template/virtual climate that supports
-   off, a heat and/or cool mode, a target temperature, minimum/maximum
-   temperatures and a target step. Open **Developer tools → States** and confirm
-   the entity reports `hvac_modes`, `min_temp`, `max_temp` and
-   `target_temp_step`; setup rejects a backend that does not.
+   off, a heat and/or cool mode and a target temperature with finite
+   minimum/maximum temperatures. Open **Developer tools → States** and confirm the
+   entity lists `off` plus the modes you configured in `hvac_modes` and reports
+   `min_temp` and `max_temp`; setup rejects a backend without these or without the
+   target temperature feature. If the backend does not report `target_temp_step`, a
+   step of 1.0 is assumed, which rounds the pump target to whole degrees.
 3. Provide a stand-in room sensor: a `sensor` with `device_class: temperature`
    and a unit of `°C`, `°F` or `K` that you can change by hand (for example a
    template sensor driven by an `input_number`).
@@ -40,7 +42,7 @@ days, with provable zero commands.
 
 | Condition | Expected in shadow mode |
 | --- | --- |
-| Room below `target - tolerance` (heat) / above `target + tolerance` (cool) | `proposed_backend_mode` is the wrapper mode, `proposed_native_target_c` is set; **zero** climate service calls |
+| Room at or below `target - cold tolerance` (heat) / at or above `target + hot tolerance` (cool) | `proposed_backend_mode` is the wrapper mode, `proposed_native_target_c` is set; **zero** climate service calls |
 | Room inside the band | `intent_reason: no_demand`, proposed mode `off` |
 | Wrapper set to `off` | `intent_reason: wrapper_off`, proposed mode `off` |
 | Room sensor `unavailable`, `unknown` or stale | `intent_reason: room_temperature_unavailable`; no commands |
@@ -82,7 +84,8 @@ rules:
 
 The wrapper exposes the proposal and the observed backend as attributes. To chart
 them without creating high-frequency churn, publish the few values you want to
-compare as template sensors, which the recorder stores with long-term statistics:
+compare as template sensors. The numeric ones (with `state_class`) also get
+long-term statistics; the text ones are kept in history only:
 
 ```yaml
 # configuration.yaml: adapt the entity IDs to your installation
@@ -146,15 +149,19 @@ cards:
       - type: attribute
         entity: climate.room_ac
         attribute: intent_reason
+        name: intent_reason
       - type: attribute
         entity: climate.room_ac
         attribute: pause_reason
+        name: pause_reason
       - type: attribute
         entity: climate.room_ac
         attribute: window_status
+        name: window_status
       - type: attribute
         entity: climate.room_ac
         attribute: optimization_reason
+        name: optimization_reason
 ```
 
 The pump target compared here includes the heating/cooling compensation, so it
@@ -164,10 +171,11 @@ backend says; it is not measured compressor runtime and not an energy meter.
 ## 2. HomeKit and Matter compatibility
 
 What is **verified**: the wrapper is a standard Home Assistant `climate` entity.
-Its supported features, HVAC modes, minimum/maximum temperature, target step,
-current temperature and base target are exercised through Home Assistant's own
-state machine and entity services in `tests/integration`. That is a test of the
-Home Assistant entity contract using mocked/fake backends.
+Its HVAC modes, current temperature and base target are asserted through Home
+Assistant's own state machine and entity services in `tests/integration`. Its
+minimum/maximum temperature, target step and supported features are not asserted
+there. That is a test of the Home Assistant entity contract using mocked/fake
+backends.
 
 What is **not verified**: any actual HomeKit Bridge, Matter exporter, controller
 app or physical device. Being in the `climate` domain does not by itself
@@ -181,8 +189,10 @@ points to check yourself on a disposable instance before relying on it:
   have no equivalent to map it to.
 - Target temperature is the **base room target**; the effective target and the
   native pump target are attributes only.
-- Changes made in the exporter's app arrive as ordinary service calls to the
-  wrapper and are subject to the same limits and persistence.
+- Changes made in the exporter's app are expected to arrive as ordinary service calls
+  to the wrapper with the same limits and persistence; this is not tested. Exporters
+  may also apply their own temperature range. No exporter or version has been
+  tested, and Matter export in Home Assistant relies on third-party bridges.
 
 Manual checklist (owner, on a disposable instance): confirm the entity appears
 with the expected modes and range in the Home Assistant thermostat card, that
@@ -208,13 +218,14 @@ backend. It does not install, enable or cut over anything by itself.
 
 ### Entity IDs: no duplicates
 
-The wrapper creates its own climate entity (named after the entry title). Do not
-rename the old entity to the same ID or create a second entity with an ID that
-already exists. If you want dashboards and voice assistants to keep working
-through an existing ID, rename the **old** entity first through an explicit,
-collision-free rename, then give the wrapper the freed ID; otherwise update the
-references to the new entity. Retargeting the wrapper later keeps its own entity
-and unique ID stable.
+The wrapper creates its own climate entity (named after the entry title). Never
+rename the **backend** climate entity: the wrapper stores its ID as a plain string
+and does not follow registry renames, and your old automations point at it too. The
+simplest path is to update dashboard and voice-assistant references to the new
+wrapper entity. If you want the wrapper to take over an ID, that is only for a
+previous virtual-thermostat entity (not the backend): rename that entity to a free
+ID first, then give the wrapper the freed one, and write the rename down so you can
+revert it. Retargeting the wrapper later keeps its own entity and unique ID stable.
 
 ### Cutover steps (owner decision, after evaluation)
 
@@ -233,15 +244,19 @@ and unique ID stable.
 
 ### Rollback
 
-1. In the wrapper options turn **shadow mode on** (live control off). Neither this
+1. In the wrapper options turn **shadow mode on** (live control off). The options
+   form validates the room sensor and backend, so it may refuse to save exactly when
+   one of them is faulty. In that case disable the config entry instead (Settings →
+   Devices & services → the entry → ⋮ → Disable). Neither this, nor shadow mode,
    nor removing the entry commands the backend; it stays in its last commanded mode
    and target.
 2. Check the backend's actual state and set it manually as intended.
-3. Re-enable the original automation(s) from the exported YAML only after the
-   wrapper is in shadow mode or removed, so there is never more than one writer.
+3. Revert any entity rename you made. Re-enable the original automation(s) from the
+   exported YAML only after the wrapper is in shadow mode, disabled or removed, so
+   there is never more than one writer.
 4. Confirm the backend follows the original controller again.
-5. Optionally remove the integration entry. The old configuration was kept
-   unchanged throughout, so nothing needs to be restored beyond re-enabling it.
+5. Optionally remove the integration entry. The old automations were only disabled
+   and their YAML exported, so nothing needs to be restored beyond re-enabling them.
 
 ## 4. What the wrapper controls, and what it does not
 

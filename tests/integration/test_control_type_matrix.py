@@ -14,6 +14,7 @@ import pytest
 from homeassistant.components.climate import HVACMode
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant.common import MockConfigEntry, async_mock_service
 
@@ -79,9 +80,11 @@ class ClimateRig(Rig):
 
 
 @asynccontextmanager
-async def switch_rig(hass: HomeAssistant, *, shadow: bool) -> AsyncIterator[SwitchRig]:
+async def switch_rig(
+    hass: HomeAssistant, *, shadow: bool, running: bool = False, failing: bool = False
+) -> AsyncIterator[SwitchRig]:
     hass.states.async_set(ROOM, "5.0", {"unit_of_measurement": "°C"})
-    hass.states.async_set("switch.heater", "off")
+    hass.states.async_set("switch.heater", "on" if running else "off")
     entry = MockConfigEntry(
         domain=DOMAIN, version=2, title="Storage",
         data={
@@ -97,8 +100,9 @@ async def switch_rig(hass: HomeAssistant, *, shadow: bool) -> AsyncIterator[Swit
     # when the integration (which depends on it) is set up, and every "zero calls"
     # assertion would pass vacuously.
     assert await async_setup_component(hass, "switch", {})
-    rig.on = async_mock_service(hass, "switch", "turn_on")
-    rig.off = async_mock_service(hass, "switch", "turn_off")
+    error = HomeAssistantError("simulated backend failure") if failing else None
+    rig.on = async_mock_service(hass, "switch", "turn_on", raise_exception=error)
+    rig.off = async_mock_service(hass, "switch", "turn_off", raise_exception=error)
     with patch(
         "custom_components.price_aware_thermostat.coordinator."
         "NordPoolPriceCoordinator._async_update_data",
@@ -112,15 +116,20 @@ async def switch_rig(hass: HomeAssistant, *, shadow: bool) -> AsyncIterator[Swit
 
 
 @asynccontextmanager
-async def climate_rig(hass: HomeAssistant, *, shadow: bool) -> AsyncIterator[ClimateRig]:
-    async with ac_env(hass, shadow=shadow, room="19.0") as env:
+async def climate_rig(
+    hass: HomeAssistant, *, shadow: bool, running: bool = False, failing: bool = False
+) -> AsyncIterator[ClimateRig]:
+    pump_mode = HVACMode.HEAT if running else HVACMode.OFF
+    async with ac_env(hass, shadow=shadow, room="19.0", pump_mode=pump_mode) as env:
+        env.pump.fail = failing
         rig = ClimateRig(hass, "climate", env.entry, WRAPPER)
         rig.env = env
         yield rig
 
 
-def rig_for(kind: str, hass: HomeAssistant, *, shadow: bool) -> Any:
-    return switch_rig(hass, shadow=shadow) if kind == "switch" else climate_rig(hass, shadow=shadow)
+def rig_for(kind: str, hass: HomeAssistant, *, shadow: bool, **flags: bool) -> Any:
+    factory = switch_rig if kind == "switch" else climate_rig
+    return factory(hass, shadow=shadow, **flags)
 
 
 COLD = {"switch": "5.0", "climate": "19.0"}  # demand for heat in either type
@@ -129,16 +138,24 @@ TYPES = ["switch", "climate"]
 
 @pytest.mark.parametrize("kind", TYPES)
 @pytest.mark.parametrize(
-    "scenario", ["cold_heat", "off_mode", "sensor_unavailable", "sensor_invalid", "stale_sensor"]
+    "scenario",
+    [
+        "cold_heat", "off_mode", "sensor_unavailable", "sensor_invalid", "stale_sensor",
+        "failing_backend", "off_while_device_running",
+    ],
 )
 async def test_shadow_mode_makes_zero_actuator_calls_for_both_types(
     hass: HomeAssistant, kind: str, scenario: str
 ) -> None:
-    async with rig_for(kind, hass, shadow=True) as rig:
+    flags = {
+        "failing_backend": {"failing": True},
+        "off_while_device_running": {"running": True},
+    }.get(scenario, {})
+    async with rig_for(kind, hass, shadow=True, **flags) as rig:
         await rig.room(COLD[kind])
         if scenario == "cold_heat":
             await rig.mode("heat")
-        elif scenario == "off_mode":
+        elif scenario in ("off_mode", "off_while_device_running"):
             await rig.mode("heat")
             await rig.mode("off")
         elif scenario == "sensor_unavailable":
@@ -202,10 +219,12 @@ async def test_base_target_and_mode_survive_options_reload_for_both_types(
         state = hass.states.get(rig.wrapper)
         assert state is not None
         assert state.attributes["temperature"] == target
+        assert state.state == "heat"
         assert rig.actuator_calls() == []
         assert await hass.config_entries.async_unload(rig.entry.entry_id)
         await hass.async_block_till_done()
         assert hass.states.get(rig.wrapper).state == "unavailable"
+        assert rig.actuator_calls() == []  # unloading sends no command
 
 
 @pytest.mark.parametrize("kind", TYPES)
