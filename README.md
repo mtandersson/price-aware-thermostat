@@ -30,7 +30,7 @@ publishes a release could it be added as a custom repository of type
 
 Pre-release, ungraded development preview, not approved for controlling
 production heaters. Tested versions, the status matrix, upgrade, removal
-and rollback procedures, and the pending license decision are in
+and rollback procedures, and the license information are in
 [docs/release.md](docs/release.md). See also the [changelog](CHANGELOG.md).
 
 ## Features
@@ -73,6 +73,12 @@ Before any use with a physical heater, follow the [staging validation and commis
 See [troubleshooting and configuration reference](docs/troubleshooting.md) for complete setup options, expected diagnostics, supported entities, error handling and step-by-step removal from a staging installation.
 
 The first supported release is blocked on a verified official Nord Pool contract and a hardware safety review; see [issue #2](https://github.com/mtandersson/price-aware-thermostat/issues/2), [issue #6](https://github.com/mtandersson/price-aware-thermostat/issues/6) and [quality audit #12](https://github.com/mtandersson/price-aware-thermostat/issues/12).
+
+## Quality audit
+
+See the [rule-by-rule quality evidence](docs/quality-audit.md) for the engineering
+review, custom-helper adaptations, automated checks and external release gates.
+The integration has no official Home Assistant quality tier.
 
 ## Developer workflow
 

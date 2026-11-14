@@ -48,6 +48,19 @@ Verify the selected sensor is reporting a numeric value with a recognized temper
 
 Confirm the official Nord Pool integration is present, the selected configuration entry and market area match, and the test environment's `nordpool.get_prices_for_date` action returns prices. Tomorrow's prices may be unavailable before publication or during an outage. The optimizer then falls back to its configured base setpoint.
 
+### Repairs reports that the Nord Pool source needs attention
+
+A deleted source, wrong integration entry or a market area removed from that
+source raises an entry-specific warning under Settings → System → Repairs.
+Enable shadow mode in the thermostat options, configure the official Nord Pool
+integration, then use Reconfigure to select its source and area. The warning
+clears on the next price refresh (normally within 15 minutes), including after
+reconfiguration reload. Unloading preserves the warning and its ignored state;
+removing the thermostat entry removes its warning. API outages and unpublished
+tomorrow prices do not raise this repair. Cached prices can remain usable until
+expiry; missing prices fall back to the base target. This procedure sends no
+actuator command.
+
 ### Shadow mode plans heating but the switch does not change
 
 That is the intended behavior. Shadow mode computes a plan without sending any heater commands.
@@ -55,6 +68,16 @@ That is the intended behavior. Shadow mode computes a plan without sending any h
 ### The switch has not acknowledged a service command
 
 A successful Home Assistant service response is not a physical relay acknowledgement. The controller uses observed switch state and rate-limits retry attempts. Check the hardware integration's device status before assuming the heater changed state.
+
+### A service action stops responding
+
+Price requests time out after 30 seconds per requested date; actuator requests
+use a 10-second timeout. A timeout cancels the waiting coroutine and preserves
+the ordinary retry cooldown. Price timeouts fall back to the base target;
+actuator timeouts remain unacknowledged until observed state confirms them.
+The controller can reconsider current intent, including a corrective OFF.
+Cancellation is cooperative and cannot undo a command already sent to a device;
+check its actual state and retain independent hardware safeguards.
 
 ### Home Assistant restarts, unloads or reloads the integration
 

@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_AREA, CONF_NORDPOOL_ENTRY
+from .const import CONF_AREA, CONF_NORDPOOL_ENTRY, DOMAIN
 from .optimizer import PriceInterval, normalize_nordpool_response
 
 if TYPE_CHECKING:
@@ -19,6 +21,8 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+
+PRICE_FETCH_TIMEOUT_SECONDS = 30
 
 FAILURE_SERVICE_ERROR = "service_error"
 FAILURE_INVALID_RESPONSE = "invalid_response"
@@ -38,7 +42,7 @@ def _failure_kind(exc: Exception) -> str:
     """Map an exception to a coarse failure kind without exposing its text."""
     if isinstance(exc, PriceFetchError):
         return exc.kind
-    if isinstance(exc, HomeAssistantError):
+    if isinstance(exc, (HomeAssistantError, TimeoutError)):
         return FAILURE_SERVICE_ERROR
     return FAILURE_INVALID_RESPONSE
 
@@ -57,7 +61,9 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
             _LOGGER,
             name=f"Price-Aware Thermostat {entry.entry_id}",
             update_interval=timedelta(minutes=15),
+            config_entry=entry,
         )
+        self._entry = entry
         self._source_entry_id = str(entry.data[CONF_NORDPOOL_ENTRY])
         self._area = str(entry.data[CONF_AREA])
         self._by_day: dict[date, tuple[PriceInterval, ...]] = {}
@@ -110,18 +116,19 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
 
     async def _fetch_day(self, day: date) -> tuple[PriceInterval, ...]:
         """Call the official action with an explicit SEK currency."""
-        response = await self.hass.services.async_call(
-            "nordpool",
-            "get_prices_for_date",
-            {
-                "config_entry": self._source_entry_id,
-                "date": day.isoformat(),
-                "areas": [self._area],
-                "currency": "SEK",
-            },
-            blocking=True,
-            return_response=True,
-        )
+        async with asyncio.timeout(PRICE_FETCH_TIMEOUT_SECONDS):
+            response = await self.hass.services.async_call(
+                "nordpool",
+                "get_prices_for_date",
+                {
+                    "config_entry": self._source_entry_id,
+                    "date": day.isoformat(),
+                    "areas": [self._area],
+                    "currency": "SEK",
+                },
+                blocking=True,
+                return_response=True,
+            )
         if not isinstance(response, dict):
             raise PriceFetchError(
                 FAILURE_INVALID_RESPONSE, "Nord Pool returned an invalid response"
@@ -145,6 +152,7 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
 
     async def _async_update_data(self) -> tuple[PriceInterval, ...]:
         """Refresh only missing calendar days and publish cached prices."""
+        self._check_price_source()
         local_now = dt_util.now()
         today = local_now.date()
         tomorrow = today + timedelta(days=1)
@@ -166,7 +174,7 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
             self._today_retry_after = local_now + timedelta(hours=1)
             try:
                 self._by_day[today] = await self._fetch_day(today)
-            except (HomeAssistantError, ValueError, LookupError) as exc:
+            except (HomeAssistantError, TimeoutError, ValueError, LookupError) as exc:
                 self._today_failure = _failure_kind(exc)
                 if not self._today_prices_unavailable:
                     _LOGGER.warning(
@@ -193,7 +201,7 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
             self._tomorrow_retry_after = local_now + timedelta(minutes=30)
             try:
                 self._by_day[tomorrow] = await self._fetch_day(tomorrow)
-            except (HomeAssistantError, ValueError, LookupError) as exc:
+            except (HomeAssistantError, TimeoutError, ValueError, LookupError) as exc:
                 self._tomorrow_failure = _failure_kind(exc)
                 _LOGGER.debug("Tomorrow's Nord Pool prices are not yet available: %s", exc)
             else:
@@ -205,4 +213,28 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
                 (interval for day in self._by_day.values() for interval in day),
                 key=lambda interval: interval.start,
             )
+        )
+
+    def _check_price_source(self) -> None:
+        """Surface deleted/misconfigured sources without stopping local control.
+
+        Transient API failures and unpublished prices require no user repair.
+        Keep this issue across unloads so an ignored issue stays ignored; HA
+        removes entry-bound issues when the thermostat entry is removed.
+        """
+        source = self.hass.config_entries.async_get_entry(self._source_entry_id)
+        issue_id = f"price_source_{self._entry.entry_id}"
+        if source is not None and source.domain == "nordpool" and self._area in {
+            str(area).upper() for area in source.data.get("areas", ())
+        }:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+            return
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            issue_id,
+            config_entry_id=self._entry.entry_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="invalid_price_source",
         )
