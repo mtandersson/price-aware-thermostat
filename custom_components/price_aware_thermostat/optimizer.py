@@ -13,6 +13,8 @@ from math import isfinite
 from typing import Literal
 
 Filter = Literal["rectangle", "triangle"]
+HvacMode = Literal["heat", "cool"]
+Reason = Literal["preheat", "precool", "expensive", "normal", "price_unavailable"]
 
 
 @dataclass(frozen=True)
@@ -40,6 +42,14 @@ class OptimizerConfig:
     deadband_sek_per_kwh: float = 0.20
     sensitivity_c_per_sek_per_kwh: float = 2.0
     min_coverage_fraction: float = 0.75
+    # Heating raises the room target while electricity is relatively cheap;
+    # cooling lowers it. The adjustment sign reverses when electricity is
+    # relatively expensive. Compensation for a device's native setpoint is
+    # deliberately not part of the optimizer.
+    hvac_mode: HvacMode = "heat"
+    # Optional symmetric limit around the base target, applied together with
+    # the absolute comfort bounds. None means only the absolute bounds apply.
+    max_deviation_c: float | None = None
 
     def __post_init__(self) -> None:
         floats = (
@@ -62,16 +72,44 @@ class OptimizerConfig:
             raise ValueError("Deadband and sensitivity must not be negative")
         if not 0 < self.min_coverage_fraction <= 1:
             raise ValueError("Coverage fraction must be in (0,1]")
+        if self.hvac_mode not in ("heat", "cool"):
+            raise ValueError("Unknown HVAC mode")
+        if self.max_deviation_c is not None and (
+            isinstance(self.max_deviation_c, bool)
+            or not isinstance(self.max_deviation_c, (int, float))
+            or not isfinite(self.max_deviation_c)
+            or self.max_deviation_c < 0
+        ):
+            raise ValueError("Maximum deviation must be a finite number, not negative")
+
+    @property
+    def lower_bound(self) -> float:
+        """Lowest permitted effective target, including any deviation limit."""
+        if self.max_deviation_c is None:
+            return self.minimum_temperature
+        return max(self.minimum_temperature, self.base_temperature - self.max_deviation_c)
+
+    @property
+    def upper_bound(self) -> float:
+        """Highest permitted effective target, including any deviation limit."""
+        if self.max_deviation_c is None:
+            return self.maximum_temperature
+        return min(self.maximum_temperature, self.base_temperature + self.max_deviation_c)
 
 
 @dataclass(frozen=True)
 class OptimizationResult:
     effective_target_c: float
-    reason: Literal["preheat", "expensive", "normal", "price_unavailable"]
+    reason: Reason
     current_price_sek_per_kwh: float | None
     future_weighted_price_sek_per_kwh: float | None
     price_difference_sek_per_kwh: float | None
     future_coverage_fraction: float
+    # Adjustment the price signal asked for before comfort limits were applied.
+    # `clamped` shows when limits reduced or removed it, even if the reason is
+    # "normal" because the final target equals the base target.
+    requested_adjustment_c: float = 0.0
+    clamped: bool = False
 
 
 def normalize_nordpool_response(
@@ -191,13 +229,18 @@ def optimize(
     adjusted_delta = max(0.0, abs(price_diff) - config.deadband_sek_per_kwh)
     if price_diff < 0:
         adjusted_delta *= -1
-    raw_target = config.base_temperature + config.sensitivity_c_per_sek_per_kwh * adjusted_delta
-    target = min(config.maximum_temperature, max(config.minimum_temperature, raw_target))
-    reason: Literal["preheat", "expensive", "normal", "price_unavailable"]
+    # A cheaper present than future favours storing heat (higher target) or
+    # cold (lower target); the sign for cooling is therefore reversed.
+    direction = 1.0 if config.hvac_mode == "heat" else -1.0
+    # `+ 0.0` normalises a negative zero so diagnostics never show -0.0.
+    adjustment = direction * config.sensitivity_c_per_sek_per_kwh * adjusted_delta + 0.0
+    raw_target = config.base_temperature + adjustment
+    target = min(config.upper_bound, max(config.lower_bound, raw_target))
+    reason: Reason
     if target > config.base_temperature + 1e-9:
-        reason = "preheat"
+        reason = "preheat" if config.hvac_mode == "heat" else "expensive"
     elif target < config.base_temperature - 1e-9:
-        reason = "expensive"
+        reason = "expensive" if config.hvac_mode == "heat" else "precool"
     else:
         reason = "normal"
     return OptimizationResult(
@@ -207,4 +250,6 @@ def optimize(
         future_price,
         price_diff,
         coverage,
+        requested_adjustment_c=adjustment,
+        clamped=abs(target - raw_target) > 1e-9,
     )

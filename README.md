@@ -44,6 +44,8 @@ It compares the current price to a weighted mean of forecast intervals. The `tri
 
 The normal target temperature displayed in the climate UI is the base setpoint; `effective_target_c` is the price-adjusted setpoint.
 
+The optimizer supports heating and cooling. Heating raises the target while electricity is relatively cheap and lowers it while expensive; cooling mirrors this (lower target when cheap, higher when expensive). Adjustments stay within the configured comfort limits and, optionally, a maximum deviation around the base target. `requested_adjustment_c` shows what the price signal asked for before limits and `adjustment_clamped` shows when limits reduced or removed it, so a target equal to the base is still explainable. Both are neutral (`0.0` / `false`) in the fixed preset and when off. The switch controller is heating-only; cooling applies to the heat-pump/AC control type.
+
 ## Staging validation, troubleshooting and removal
 
 Before any use with a physical heater, follow the [staging validation and commissioning gates](docs/staging-validation.md), including a disconnected mock relay, official Nord Pool service-action verification, and rollback evidence. Do **not** enable live control on production equipment to collect this evidence.

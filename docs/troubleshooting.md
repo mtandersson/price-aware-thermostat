@@ -34,7 +34,7 @@ The normal thermostat UI temperature is the base target; `effective_target_c` is
 
 ## Diagnostics
 
-The climate entity exposes `shadow_mode`, `temperature_sample_fresh`, `planned_heating`, `effective_target_c`, `optimization_reason`, current electricity price, weighted future price, price difference and forecast coverage. The integration's downloadable diagnostics omit private entity IDs, room names and temperature measurements.
+The climate entity exposes `shadow_mode`, `temperature_sample_fresh`, `planned_heating`, `effective_target_c`, `optimization_reason`, current electricity price, weighted future price, price difference, forecast coverage, `requested_adjustment_c` (what pricing asked for before comfort limits) and `adjustment_clamped` (limits reduced or removed it). The integration's downloadable diagnostics omit private entity IDs, room names and temperature measurements.
 
 ## Common problems
 
