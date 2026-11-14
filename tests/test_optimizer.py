@@ -130,6 +130,44 @@ class OptimizerTests(unittest.TestCase):
         parsed = normalize_nordpool_response(raw, "SE4")
         self.assertAlmostEqual(0.3205, parsed[0].price_sek_per_kwh)
 
+    def test_nordpool_response_rejects_invalid_collection(self):
+        for invalid in (None, "bad", {"start": "2026-11-14"}):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                normalize_nordpool_response({"SE4": invalid}, "SE4")
+
+    def test_nordpool_response_rejects_bad_interval_fields(self):
+        good = {
+            "start": "2026-11-14T10:00:00+00:00",
+            "end": "2026-11-14T10:15:00+00:00",
+            "price": 300.0,
+        }
+        invalid_rows = [
+            "wrong",
+            {"start": "invalid", "end": good["end"], "price": 300.0},
+            {**good, "price": True},
+            {**good, "price": None},
+            {**good, "price": "NaN"},
+            {**good, "end": good["start"]},
+        ]
+        for invalid in invalid_rows:
+            with self.subTest(interval=invalid), self.assertRaises(ValueError):
+                normalize_nordpool_response({"SE4": [invalid]}, "SE4")
+
+    def test_nordpool_accepts_signed_prices_and_iso_zulu(self):
+        parsed = normalize_nordpool_response(
+            {
+                "SE4": [
+                    {
+                        "start": "2026-11-14T10:00:00Z",
+                        "end": "2026-11-14T10:15:00Z",
+                        "price": "-150.0",
+                    }
+                ]
+            },
+            "SE4",
+        )
+        self.assertAlmostEqual(-0.15, parsed[0].price_sek_per_kwh)
+
     def test_overlap_rejected(self):
         data = [
             PriceInterval(T0, T0 + timedelta(minutes=30), 1),
