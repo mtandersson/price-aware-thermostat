@@ -121,4 +121,4 @@ Development work is tracked in [GitHub issues](https://github.com/mtandersson/pr
 
 ## License
 
-No license is granted for redistribution or use beyond GitHub's default terms while the repository is private. A project license can be selected before any public release.
+[MIT](LICENSE). The software is provided without warranty and must not be relied on as a safety device. See [SECURITY.md](SECURITY.md) to report vulnerabilities and [CONTRIBUTING.md](CONTRIBUTING.md) to contribute.
