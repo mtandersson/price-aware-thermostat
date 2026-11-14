@@ -1,0 +1,200 @@
+{
+  "title": "Prisstyrd termostat",
+  "config": {
+    "step": {
+      "reconfigure": {
+        "title": "Byt Nord Pool-källa",
+        "description": "Byt Nord Pool-priskälla och elområde. Det går även i live-läge: priskällan styr aldrig värmaren eller värmepumpen, och om priser inte kan hämtas faller termostaten tillbaka till sitt grundmål och visar ett reparationsärende. Samma fält finns också i integrationens alternativ.",
+        "data": {
+          "nordpool_config_entry": "Priskälla (Nord Pool-integrationen; kommande priser hämtas via dess åtgärd)",
+          "market_area": "Nord Pool-elområde (till exempel SE3)"
+        },
+        "data_description": {
+          "nordpool_config_entry": "Den officiella Nord Pool-integrationen som levererar elpriserna. Kan ändras även i live-läge, eftersom den aldrig styr enheten.",
+          "market_area": "Elområdet som läses från Nord Pool-källan, till exempel SE3 eller SE4. Det måste vara ett av områdena som är konfigurerade där."
+        }
+      },
+      "user": {
+        "title": "Lägg till en prisstyrd termostat",
+        "description": "Välj styrtyp och en extern temperaturgivare. Nya poster startar i skuggläge, som beräknar beslut utan att skicka några kommandon. Typen värmepump/AC styr en befintlig climate-entitet utifrån rumsgivaren när live-styrning har bekräftats.",
+        "data": {
+          "name": "Namn",
+          "temperature_sensor": "Temperaturgivare",
+          "heater": "Styrd brytare eller climate",
+          "nordpool_config_entry": "Priskälla (Nord Pool-integrationen; kommande priser hämtas via dess åtgärd)",
+          "market_area": "Nord Pool-elområde (till exempel SE3)",
+          "base_temperature": "Grundtemperatur (°C)",
+          "minimum_temperature": "Lägsta tillåtna mål (°C, absolut säkerhetsgräns)",
+          "maximum_temperature": "Högsta tillåtna mål (°C, absolut säkerhetsgräns)",
+          "lookahead_minutes": "Prisframförhållning (minuter)",
+          "filter_type": "Prisfilter",
+          "deadband_sek_per_kwh": "Prisdödband (SEK/kWh)",
+          "sensitivity_c_per_sek_per_kwh": "Känslighet (°C per SEK/kWh)",
+          "cold_tolerance": "Tolerans på kalla sidan (°C): värme startar / kyla stoppar",
+          "hot_tolerance": "Tolerans på varma sidan (°C): värme stoppar / kyla startar",
+          "min_cycle_seconds": "Minsta reläcykel / omstartspaus för pump (sekunder)",
+          "max_sensor_age_minutes": "Högsta ålder på temperaturvärde (minuter)",
+          "control_type": "Styrtyp",
+          "controlled_hvac_modes": "Värme-/kyllägen att styra (värmepump/AC)",
+          "heat_compensation": "Värmekompensation för pumpens börvärde (°C)",
+          "cool_compensation": "Kylkompensation för pumpens börvärde (°C)",
+          "maximum_price_deviation": "Största prisjustering runt ditt mål (°C, standard 0,8; 0 stänger av prisjusteringen)",
+          "window_contacts": "Fönster-/dörrkontakter (valfritt)",
+          "window_open_delay_seconds": "Öppet längre än så pausar driften (sekunder)",
+          "window_close_delay_seconds": "Stängt minst så länge innan driften återupptas (sekunder)"
+        },
+        "data_description": {
+          "name": "Visningsnamn för den nya termostatentiteten. Exempel: Garagevärme.",
+          "temperature_sensor": "Rumsgivaren som termostaten reglerar mot (°C, °F eller K). Exempel: sensor.garage_temperatur.",
+          "heater": "Brytaren (elementtyp) eller climate-entiteten (värmepump/AC) som termostaten styr. Bara en instans får styra varje enhet.",
+          "nordpool_config_entry": "Den officiella Nord Pool-integrationen som levererar elpriserna. Kan ändras även i live-läge, eftersom den aldrig styr enheten.",
+          "market_area": "Elområdet som läses från Nord Pool-källan, till exempel SE3 eller SE4. Det måste vara ett av områdena som är konfigurerade där.",
+          "base_temperature": "Ditt normala mål i °C. Prisjusteringen flyttar målet runt detta värde. Exempel: 6,0 för ett frostskyddat garage, 21 för ett vardagsrum.",
+          "minimum_temperature": "Absolut säkerhetsgolv i °C och lägsta börvärde som tillåts i gränssnittet. Standard 5 för nya poster.",
+          "maximum_temperature": "Absolut säkerhetstak i °C och högsta börvärde som tillåts i gränssnittet. Standard 25 för nya poster.",
+          "lookahead_minutes": "Hur långt framåt, i minuter, nuvarande pris jämförs med kommande priser. Exempel: 180 jämför nu med de kommande 3 timmarna.",
+          "filter_type": "Hur kommande priser medelvärdesbildas. Triangel väger den närmaste framtiden tyngst och avtar till noll vid framförhållningens slut; rektangel väger varje minut lika.",
+          "deadband_sek_per_kwh": "Prisskillnader mindre än detta (SEK/kWh) ignoreras, och bara överskottet räknas. Exempel: 0,20 gör att en skillnad på 0,50 SEK/kWh räknas som 0,30.",
+          "sensitivity_c_per_sek_per_kwh": "Hur många °C målet flyttas per SEK/kWh prisskillnad utöver dödbandet. Exempel: 2,0 × 0,30 SEK/kWh = 0,6 °C.",
+          "cold_tolerance": "Hysteres på kalla sidan i °C. Värmen startar vid eller under målet − detta värde; kylan stoppar där. Exempel: 0,3 med mål 6,0 startar värmen vid 5,7 °C.",
+          "hot_tolerance": "Hysteres på varma sidan i °C. Värmen stoppar vid målet + detta värde; kylan startar där. Exempel: 0,3 med mål 6,0 stoppar värmen vid 6,3 °C.",
+          "min_cycle_seconds": "Minsta tid i sekunder mellan reläomslag, eller omstartspausen för en värmepump (minst 60 s). Säkerhetsavstängningar fördröjs inte. Exempel: 300.",
+          "max_sensor_age_minutes": "Ett temperaturvärde äldre än detta (minuter) räknas som otillgängligt, och enheten stängs av. Exempel: 60.",
+          "control_type": "Element/brytare: slår ett värmerelä av och på. Värmepump/AC: skickar läge och börvärde till en befintlig climate-entitet.",
+          "controlled_hvac_modes": "Vilka lägen termostaten erbjuder och får beordra värmepumpen: värme, kyla eller båda. Enheten måste också stödja av.",
+          "heat_compensation": "°C som läggs till rumsmålet innan det skickas som pumpens börvärde vid värme, eftersom pumpen mäter vid sin egen enhet. Exempel: +2 skickar 23 för ett mål på 21 °C.",
+          "cool_compensation": "°C som läggs till rumsmålet innan det skickas som pumpens börvärde vid kyla. Exempel: −1 skickar 23 för ett mål på 24 °C.",
+          "maximum_price_deviation": "Största prisjustering, ± °C runt ditt mål, för alla styrtyper; min/max gäller fortfarande. Exempel: 0,8 med mål 21 håller det inom 20,2–21,8 °C. 0 stänger av prisjusteringen.",
+          "window_contacts": "Binära sensorer för fönster eller dörrar. När någon står öppen pausas värmepumpen; okända kontakter varken pausar eller återupptar den.",
+          "window_open_delay_seconds": "En kontakt måste vara öppen så här många sekunder innan värmepumpen stängs av. Exempel: 120.",
+          "window_close_delay_seconds": "Alla kontakter måste vara stängda så här många sekunder innan driften återupptas. Exempel: 60."
+        }
+      }
+    },
+    "error": {
+      "invalid_price_source": "Välj en giltig Nord Pool-konfiguration.",
+      "invalid_temperature_range": "Lägsta måste vara högst grundtemperaturen, som måste vara högst den högsta, och största prisjustering måste vara 0–20 °C.",
+      "invalid_entities": "Givaren och värmaren måste vara olika entiteter.",
+      "invalid_market_area": "Välj ett elområde som är konfigurerat i den valda Nord Pool-integrationen.",
+      "invalid_backend": "Välj ett giltigt ställdon som passar styrtypen; brytarstyrning stöder bara värme.",
+      "invalid_room_sensor": "Välj en tillgänglig temperaturgivare med numeriskt värde och en temperaturenhet som stöds.",
+      "invalid_actuator": "Välj ett tillgängligt ställdon som passar styrtypen.",
+      "recursive_backend": "En prisstyrd termostat kan inte styra sig själv eller en annan instans.",
+      "already_configured": "Det här ställdonet har redan en prisstyrd termostat.",
+      "invalid_hvac_modes": "Välj värme-/kyllägen som enheten stöder; den måste också stödja av.",
+      "invalid_backend_limits": "Climate-entiteten måste stödja måltemperatur och rapportera ändliga, ordnade temperaturgränser och ett positivt steg.",
+      "invalid_ac_settings": "Kompensationen måste ligga inom ±10 °C, omstartspausen 60–3600 sekunder, fönsterfördröjningarna 0–3600 sekunder och prisavvikelsen 0–20 °C.",
+      "invalid_window_sensor": "Fönster-/dörrkontakter måste vara binära sensorer."
+    },
+    "abort": {
+      "already_configured": "Det här ställdonet har redan en prisstyrd termostat.",
+      "reconfigure_successful": "Nord Pool-källan och elområdet uppdaterades."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Termostatinställningar",
+        "description": "Att gå från skuggläge till live-styrning kräver en engångsbekräftelse av säkerheten; den sparas tills skuggläget slås på igen. Skuggläget beräknar och visar föreslagna beslut utan att skicka kommandon. Priskällan är Nord Pool-integrationens post; kommande priser hämtas via dess åtgärd. Prisjusteringen är relativ till målet du ställer in (± största prisjustering); lägsta och högsta är absoluta säkerhetsgränser. Fullständig förklaring av varje inställning, med exempel: https://github.com/mtandersson/price-aware-thermostat/blob/main/docs/settings.md",
+        "data": {
+          "base_temperature": "Grundtemperatur (°C)",
+          "minimum_temperature": "Lägsta tillåtna mål (°C, absolut säkerhetsgräns)",
+          "maximum_temperature": "Högsta tillåtna mål (°C, absolut säkerhetsgräns)",
+          "lookahead_minutes": "Prisframförhållning (minuter)",
+          "filter_type": "Prisfilter",
+          "deadband_sek_per_kwh": "Prisdödband (SEK/kWh)",
+          "sensitivity_c_per_sek_per_kwh": "Känslighet (°C per SEK/kWh)",
+          "cold_tolerance": "Tolerans på kalla sidan (°C): värme startar / kyla stoppar",
+          "hot_tolerance": "Tolerans på varma sidan (°C): värme stoppar / kyla startar",
+          "min_cycle_seconds": "Minsta cykel / omstartspaus för pump (sekunder)",
+          "shadow_mode": "Skuggläge (skicka inga kommandon)",
+          "safety_acknowledged": "Jag har kontrollerat att enheten styrs enbart av denna termostat och att oberoende hårdvaruskydd finns",
+          "max_sensor_age_minutes": "Högsta ålder på temperaturvärde (minuter)",
+          "temperature_sensor": "Extern temperaturgivare",
+          "heater": "Styrt ställdon",
+          "controlled_hvac_modes": "Värme-/kyllägen att styra (värmepump/AC)",
+          "heat_compensation": "Värmekompensation för pumpens börvärde (°C)",
+          "cool_compensation": "Kylkompensation för pumpens börvärde (°C)",
+          "maximum_price_deviation": "Största prisjustering runt ditt mål (°C, standard 0,8; 0 stänger av prisjusteringen)",
+          "window_contacts": "Fönster-/dörrkontakter (valfritt)",
+          "window_open_delay_seconds": "Öppet längre än så pausar driften (sekunder)",
+          "window_close_delay_seconds": "Stängt minst så länge innan driften återupptas (sekunder)",
+          "nordpool_config_entry": "Priskälla (Nord Pool-integrationen; kommande priser hämtas via dess åtgärd)",
+          "market_area": "Nord Pool-elområde (till exempel SE3)"
+        },
+        "data_description": {
+          "base_temperature": "Ditt normala mål i °C. Prisjusteringen flyttar målet runt detta värde. Exempel: 6,0 för ett frostskyddat garage, 21 för ett vardagsrum.",
+          "minimum_temperature": "Absolut säkerhetsgolv i °C och lägsta börvärde som tillåts i gränssnittet. Standard 5 för nya poster.",
+          "maximum_temperature": "Absolut säkerhetstak i °C och högsta börvärde som tillåts i gränssnittet. Standard 25 för nya poster.",
+          "lookahead_minutes": "Hur långt framåt, i minuter, nuvarande pris jämförs med kommande priser. Exempel: 180 jämför nu med de kommande 3 timmarna.",
+          "filter_type": "Hur kommande priser medelvärdesbildas. Triangel väger den närmaste framtiden tyngst och avtar till noll vid framförhållningens slut; rektangel väger varje minut lika.",
+          "deadband_sek_per_kwh": "Prisskillnader mindre än detta (SEK/kWh) ignoreras, och bara överskottet räknas. Exempel: 0,20 gör att en skillnad på 0,50 SEK/kWh räknas som 0,30.",
+          "sensitivity_c_per_sek_per_kwh": "Hur många °C målet flyttas per SEK/kWh prisskillnad utöver dödbandet. Exempel: 2,0 × 0,30 SEK/kWh = 0,6 °C.",
+          "cold_tolerance": "Hysteres på kalla sidan i °C. Värmen startar vid eller under målet − detta värde; kylan stoppar där. Exempel: 0,3 med mål 6,0 startar värmen vid 5,7 °C.",
+          "hot_tolerance": "Hysteres på varma sidan i °C. Värmen stoppar vid målet + detta värde; kylan startar där. Exempel: 0,3 med mål 6,0 stoppar värmen vid 6,3 °C.",
+          "min_cycle_seconds": "Minsta tid i sekunder mellan reläomslag, eller omstartspausen för en värmepump (minst 60 s). Säkerhetsavstängningar fördröjs inte. Exempel: 300.",
+          "shadow_mode": "När det är på beräknas och visas beslut, men inga kommandon skickas till enheten. Att slå på det igen nollställer också säkerhetsbekräftelsen.",
+          "safety_acknowledged": "Frågas en gång när du går från skuggläge till live-styrning: bekräfta att ingen annan automation styr enheten och att oberoende hårdvaruskydd (till exempel en överhettningsbrytare) finns. Sparas tills skuggläget slås på igen.",
+          "max_sensor_age_minutes": "Ett temperaturvärde äldre än detta (minuter) räknas som otillgängligt, och enheten stängs av. Exempel: 60.",
+          "temperature_sensor": "Rumsgivaren som termostaten reglerar mot (°C, °F eller K). Exempel: sensor.garage_temperatur.",
+          "heater": "Brytaren (elementtyp) eller climate-entiteten (värmepump/AC) som termostaten styr. Bara en instans får styra varje enhet.",
+          "controlled_hvac_modes": "Vilka lägen termostaten erbjuder och får beordra värmepumpen: värme, kyla eller båda. Enheten måste också stödja av.",
+          "heat_compensation": "°C som läggs till rumsmålet innan det skickas som pumpens börvärde vid värme, eftersom pumpen mäter vid sin egen enhet. Exempel: +2 skickar 23 för ett mål på 21 °C.",
+          "cool_compensation": "°C som läggs till rumsmålet innan det skickas som pumpens börvärde vid kyla. Exempel: −1 skickar 23 för ett mål på 24 °C.",
+          "maximum_price_deviation": "Största prisjustering, ± °C runt ditt mål, för alla styrtyper; min/max gäller fortfarande. Exempel: 0,8 med mål 21 håller det inom 20,2–21,8 °C. 0 stänger av prisjusteringen.",
+          "window_contacts": "Binära sensorer för fönster eller dörrar. När någon står öppen pausas värmepumpen; okända kontakter varken pausar eller återupptar den.",
+          "window_open_delay_seconds": "En kontakt måste vara öppen så här många sekunder innan värmepumpen stängs av. Exempel: 120.",
+          "window_close_delay_seconds": "Alla kontakter måste vara stängda så här många sekunder innan driften återupptas. Exempel: 60.",
+          "nordpool_config_entry": "Den officiella Nord Pool-integrationen som levererar elpriserna. Kan ändras även i live-läge, eftersom den aldrig styr enheten.",
+          "market_area": "Elområdet som läses från Nord Pool-källan, till exempel SE3 eller SE4. Det måste vara ett av områdena som är konfigurerade där."
+        }
+      }
+    },
+    "error": {
+      "invalid_temperature_range": "Lägsta måste vara högst grundtemperaturen, som måste vara högst den högsta, och största prisjustering måste vara 0–20 °C.",
+      "safety_confirmation_required": "Bekräfta att enheten styrs enbart av denna termostat och att oberoende hårdvaruskydd finns innan live-styrning aktiveras.",
+      "invalid_backend": "Välj ett giltigt ställdon som passar styrtypen; brytarstyrning stöder bara värme.",
+      "invalid_room_sensor": "Välj en tillgänglig temperaturgivare med numeriskt värde och en temperaturenhet som stöds.",
+      "invalid_actuator": "Välj ett tillgängligt ställdon som passar styrtypen.",
+      "recursive_backend": "En prisstyrd termostat kan inte styra sig själv eller en annan instans.",
+      "already_configured": "Det här ställdonet har redan en prisstyrd termostat.",
+      "invalid_hvac_modes": "Välj värme-/kyllägen som enheten stöder; den måste också stödja av.",
+      "invalid_backend_limits": "Climate-entiteten måste stödja måltemperatur och rapportera ändliga, ordnade temperaturgränser och ett positivt steg.",
+      "actuator_handoff_required": "Innan ställdonet byts: spara skuggläge, kontrollera att den tidigare brytaren är av och behåll det nya ställdonet i skuggläge.",
+      "invalid_ac_settings": "Kompensationen måste ligga inom ±10 °C, omstartspausen 60–3600 sekunder, fönsterfördröjningarna 0–3600 sekunder och prisavvikelsen 0–20 °C.",
+      "invalid_window_sensor": "Fönster-/dörrkontakter måste vara binära sensorer."
+    }
+  },
+  "selector": {
+    "control_type": {
+      "options": {
+        "switch": "Element / värmebrytare",
+        "climate": "Värmepump / AC (climate)"
+      }
+    }
+  },
+  "exceptions": {
+    "temperature_out_of_range": {
+      "message": "Temperaturen måste vara mellan {min_temp} och {max_temp} grader (de konfigurerade gränserna)."
+    },
+    "unsupported_hvac_mode": {
+      "message": "HVAC-läget {hvac_mode} stöds inte av den här termostaten."
+    },
+    "unsupported_preset_mode": {
+      "message": "Förinställningen {preset_mode} stöds inte av den här termostaten."
+    }
+  },
+  "issues": {
+    "invalid_price_source": {
+      "title": "Den valda Nord Pool-källan behöver åtgärdas",
+      "description": "Den valda Nord Pool-konfigurationen har tagits bort eller levererar inte längre det konfigurerade elområdet. Kontrollera den officiella Nord Pool-integrationen under Inställningar → Enheter och tjänster. Välj sedan en befintlig Nord Pool-konfiguration och ett av dess områden, antingen med Omkonfigurera eller i termostatens alternativ. Båda fungerar även i live-läge; skuggläge krävs inte. Cachade priser kan användas tills de går ut; utan användbara priser använder termostaten sitt grundmål. Ärendet försvinner vid nästa prisuppdatering efter att källan rättats. Ändra inte vem som äger den fysiska enheten för att åtgärda en priskälla."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "price": {
+        "name": "Elpris"
+      }
+    }
+  }
+}
