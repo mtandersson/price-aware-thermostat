@@ -6,7 +6,7 @@ controls a heater. Prices must be supplied as SEK/kWh in UTC-aware intervals.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from math import isfinite
@@ -75,25 +75,39 @@ class OptimizationResult:
 
 
 def normalize_nordpool_response(
-    response: dict, area: str
+    response: Mapping[str, object], area: str
 ) -> list[PriceInterval]:
-    """Parse the official nordpool.get_prices_for_date response for one area.
+    """Validate and normalize official Nord Pool prices for one market area.
 
-    The action's `price` field is denominated in currency/MWh. This adapter
-    assumes the service was invoked with currency='SEK' and converts to SEK/kWh.
-    The caller must explicitly request SEK; other currencies must not be passed.
+    The official action returns price data in currency/MWh. Callers must request
+    SEK explicitly; the normalized price then uses SEK/kWh. All untrusted
+    service-response values are checked before use, not merely cast into types.
     """
-    if area not in response:
-        raise ValueError(f"Market area {area!r} not present in response")
-    result = []
-    for raw in response[area]:
+    raw_intervals = response.get(area)
+    if not isinstance(raw_intervals, list):
+        raise ValueError(f"Missing or invalid price series for market area {area!r}")
+
+    result: list[PriceInterval] = []
+    for raw in raw_intervals:
+        if not isinstance(raw, dict):
+            raise ValueError("Invalid Nord Pool interval")
+        start_value = raw.get("start")
+        end_value = raw.get("end")
+        price_value = raw.get("price")
+        if (
+            not isinstance(start_value, str)
+            or not isinstance(end_value, str)
+            or not isinstance(price_value, (str, int, float))
+            or isinstance(price_value, bool)
+        ):
+            raise ValueError("Invalid Nord Pool interval")
         try:
-            start = datetime.fromisoformat(raw["start"].replace("Z", "+00:00"))
-            end = datetime.fromisoformat(raw["end"].replace("Z", "+00:00"))
-            price = float(raw["price"]) / 1000.0
-        except (KeyError, ValueError, TypeError, AttributeError) as exc:
+            start = datetime.fromisoformat(start_value.replace("Z", "+00:00"))
+            end = datetime.fromisoformat(end_value.replace("Z", "+00:00"))
+            price = float(price_value) / 1000.0
+            result.append(PriceInterval(start, end, price))
+        except (ValueError, TypeError, OverflowError) as exc:
             raise ValueError("Invalid Nord Pool interval") from exc
-        result.append(PriceInterval(start, end, price))
     return result
 
 
