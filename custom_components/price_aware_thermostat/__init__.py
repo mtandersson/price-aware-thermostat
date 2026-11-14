@@ -73,7 +73,15 @@ async def async_migrate_entry(hass: HomeAssistant, entry: PriceAwareConfigEntry)
                 options[key] = legacy
         hass.config_entries.async_update_entry(entry, options=options, minor_version=2)
     if entry.minor_version < 3:
-        _move_entity_name_to_device(hass, entry)
+        try:
+            _move_entity_name_to_device(hass, entry)
+        except Exception:  # noqa: BLE001 - a cosmetic rename must never block setup
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Could not move the custom entity name to the device for %s", entry.title,
+                exc_info=True,
+            )
         hass.config_entries.async_update_entry(entry, minor_version=3)
     return True
 

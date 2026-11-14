@@ -221,6 +221,7 @@ class PriceAwareThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 2
     # Minor 2: maximum_price_deviation is always set (default 0.8 °C).
+    # Minor 3: a custom climate registry name lives on the device's name_by_user.
     MINOR_VERSION = 3
 
     async def async_step_user(

@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+import pytest
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -148,3 +150,15 @@ async def test_migration_is_idempotent_across_reload(hass: HomeAssistant) -> Non
         await hass.async_block_till_done()
     assert _names(hass, entry) == ("Later", CUSTOM, f"{CUSTOM} Later")
     assert entry.minor_version == 3
+
+
+async def test_failed_rename_still_loads_the_entry(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    entry = _entry(hass)
+    _register(hass, entry, CUSTOM)
+    with patch.object(dr.DeviceRegistry, "async_update_device", side_effect=RuntimeError("boom")):
+        await _setup(hass, entry)
+    assert entry.state is ConfigEntryState.LOADED
+    assert entry.minor_version == 3
+    assert "Could not move the custom entity name" in caplog.text
