@@ -155,7 +155,9 @@ class PriceAwareThermostat(RestoreClimate):
             "shadow_mode": self._shadow,
             "temperature_sample_fresh": self._sensor_fresh,
             "effective_target_c": (
-                result.effective_target_c if result else self._attr_native_target_temperature
+                result.effective_target_c
+                if result and self._attr_preset_mode == PRESET_PRICE_AWARE
+                else self._base_target
             ),
             "price_now_sek_per_kwh": result.current_price_sek_per_kwh if result else None,
             "weighted_future_price_sek_per_kwh": (
@@ -165,7 +167,15 @@ class PriceAwareThermostat(RestoreClimate):
                 result.price_difference_sek_per_kwh if result else None
             ),
             "future_coverage_fraction": result.future_coverage_fraction if result else 0.0,
-            "optimization_reason": result.reason if result else "price_unavailable",
+            "optimization_reason": (
+                "off"
+                if self._attr_hvac_mode == HVACMode.OFF
+                else "fixed"
+                if self._attr_preset_mode == PRESET_FIXED
+                else result.reason
+                if result
+                else "price_unavailable"
+            ),
             "planned_heating": self._planned_heating,
         }
 
