@@ -16,6 +16,7 @@ from custom_components.price_aware_thermostat.const import (
     CONF_MIN_CYCLE,
     CONF_MIN_TEMP,
     CONF_SAFETY_ACK,
+    CONF_SAFETY_ACK_AT,
     CONF_SENSITIVITY,
     CONF_SHADOW,
     DOMAIN,
@@ -94,4 +95,73 @@ async def test_options_accepts_live_mode_only_with_confirmation(
     )
     assert accepted["type"] == FlowResultType.CREATE_ENTRY
     assert accepted["data"][CONF_SHADOW] is False
-    assert CONF_SAFETY_ACK not in accepted["data"]
+    assert accepted["data"][CONF_SAFETY_ACK] is True
+    assert accepted["data"][CONF_SAFETY_ACK_AT]
+
+
+def _live_save(entry: MockConfigEntry) -> dict[str, object]:
+    """Settings for a save that keeps the entry live without ticking the box."""
+    settings = _settings(shadow=False, acknowledged=False)
+    del settings[CONF_SAFETY_ACK]
+    return settings
+
+
+async def test_ack_persists_across_live_saves(hass: HomeAssistant) -> None:
+    """Once live, later saves neither show nor require the acknowledgement."""
+    entry = MockConfigEntry(domain=DOMAIN, title="Test thermostat", data={})
+    entry.add_to_hass(hass)
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    await hass.config_entries.options.async_configure(
+        flow["flow_id"], _settings(shadow=False, acknowledged=True)
+    )
+    stamp = entry.options[CONF_SAFETY_ACK_AT]
+
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    assert CONF_SAFETY_ACK not in flow["data_schema"].schema
+    second = await hass.config_entries.options.async_configure(
+        flow["flow_id"], _live_save(entry)
+    )
+    assert second["type"] == FlowResultType.CREATE_ENTRY
+    assert second["data"][CONF_SHADOW] is False
+    assert second["data"][CONF_SAFETY_ACK] is True
+    assert second["data"][CONF_SAFETY_ACK_AT] == stamp
+
+
+async def test_shadow_clears_ack_and_next_live_asks_again(hass: HomeAssistant) -> None:
+    """Re-enabling shadow mode forgets the acknowledgement."""
+    entry = MockConfigEntry(
+        domain=DOMAIN, title="Test thermostat", data={},
+        options={CONF_SHADOW: False, CONF_SAFETY_ACK: True,
+                 CONF_SAFETY_ACK_AT: "2026-01-01T00:00:00+00:00"},
+    )
+    entry.add_to_hass(hass)
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    back = await hass.config_entries.options.async_configure(
+        flow["flow_id"], {**_live_save(entry), CONF_SHADOW: True}
+    )
+    assert back["type"] == FlowResultType.CREATE_ENTRY
+    assert CONF_SAFETY_ACK not in back["data"]
+    assert CONF_SAFETY_ACK_AT not in back["data"]
+
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    assert CONF_SAFETY_ACK in flow["data_schema"].schema
+    rejected = await hass.config_entries.options.async_configure(
+        flow["flow_id"], _settings(shadow=False, acknowledged=False)
+    )
+    assert rejected["errors"]["base"] == "safety_confirmation_required"
+    assert entry.options[CONF_SHADOW] is True
+
+
+async def test_legacy_live_entry_counts_as_acknowledged(hass: HomeAssistant) -> None:
+    """A live entry saved under the old rule (no stored ack) needs no re-tick."""
+    entry = MockConfigEntry(
+        domain=DOMAIN, title="Test thermostat", data={}, options={CONF_SHADOW: False}
+    )
+    entry.add_to_hass(hass)
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    accepted = await hass.config_entries.options.async_configure(
+        flow["flow_id"], _live_save(entry)
+    )
+    assert accepted["type"] == FlowResultType.CREATE_ENTRY
+    assert accepted["data"][CONF_SHADOW] is False
+    assert accepted["data"][CONF_SAFETY_ACK] is True

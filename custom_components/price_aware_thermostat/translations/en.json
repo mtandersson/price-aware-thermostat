@@ -66,7 +66,7 @@
     "step": {
       "init": {
         "title": "Thermostat settings",
-        "description": "Live control requires explicit safety confirmation. Shadow mode calculates and shows proposed decisions without sending commands.",
+        "description": "Switching from shadow mode to live control requires a one-time safety confirmation; it is remembered until shadow mode is turned on again. Shadow mode calculates and shows proposed decisions without sending commands.",
         "data": {
           "base_temperature": "Base temperature (\u00b0C)",
           "minimum_temperature": "Minimum temperature (\u00b0C)",

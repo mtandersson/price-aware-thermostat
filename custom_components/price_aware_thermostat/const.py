@@ -27,6 +27,7 @@ CONF_MIN_CYCLE: Final = "min_cycle_seconds"
 CONF_MAX_SENSOR_AGE: Final = "max_sensor_age_minutes"
 CONF_SHADOW: Final = "shadow_mode"
 CONF_SAFETY_ACK: Final = "safety_acknowledged"
+CONF_SAFETY_ACK_AT: Final = "safety_acknowledged_at"
 
 # Heat-pump/AC (climate backend) settings.
 CONF_HEAT_COMPENSATION: Final = "heat_compensation"

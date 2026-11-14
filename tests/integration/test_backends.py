@@ -217,7 +217,8 @@ async def test_climate_live_control_can_be_enabled_after_confirmation(hass: Home
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_SHADOW] is False
-    assert "safety_acknowledged" not in result["data"]
+    assert result["data"]["safety_acknowledged"] is True
+    assert result["data"]["safety_acknowledged_at"]
 
 
 @pytest.mark.parametrize(("changes", "error"), [
@@ -292,7 +293,9 @@ async def test_switch_retarget_requires_safe_handoff(
     entry.add_to_hass(hass)
     flow = await hass.config_entries.options.async_init(entry.entry_id)
     result = await hass.config_entries.options.async_configure(flow["flow_id"], {
-        CONF_HEATER: "switch.new", CONF_SHADOW: new_shadow, "safety_acknowledged": True,
+        CONF_HEATER: "switch.new", CONF_SHADOW: new_shadow,
+        # The acknowledgement box is only offered while the entry is in shadow.
+        **({"safety_acknowledged": True} if old_shadow else {}),
     })
     assert result["type"] == FlowResultType.FORM
     assert result["errors"]["base"] == "actuator_handoff_required"
@@ -386,3 +389,24 @@ async def test_switch_entries_do_not_store_heat_pump_settings(hass: HomeAssistan
     for key in ("heat_compensation", "window_contacts", "maximum_price_deviation",
                 CONF_HVAC_MODES):
         assert key not in result["data"]
+
+
+async def test_live_actuator_change_is_blocked_even_when_acknowledged(
+    hass: HomeAssistant,
+) -> None:
+    """While live, a stored ack never covers a new actuator: retarget is refused."""
+    entities(hass)
+    hass.states.async_set("switch.old", "off")
+    hass.states.async_set("switch.new", "off")
+    data = {**settings(), CONF_CONTROL_TYPE: CONTROL_SWITCH,
+            CONF_HEATER: "switch.old", CONF_HVAC_MODES: ["heat"]}
+    entry = MockConfigEntry(domain=DOMAIN, version=2, data=data, options={
+        CONF_SHADOW: False, "safety_acknowledged": True,
+    })
+    entry.add_to_hass(hass)
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(flow["flow_id"], {
+        CONF_HEATER: "switch.new", CONF_SHADOW: False,
+    })
+    assert result["errors"]["base"] == "actuator_handoff_required"
+    assert entry.options.get(CONF_HEATER, entry.data[CONF_HEATER]) == "switch.old"
