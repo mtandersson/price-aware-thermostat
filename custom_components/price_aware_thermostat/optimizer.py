@@ -146,6 +146,14 @@ def normalize_nordpool_response(
             result.append(PriceInterval(start, end, price))
         except (ValueError, TypeError, OverflowError) as exc:
             raise ValueError("Invalid Nord Pool interval") from exc
+
+    # Official 15-minute series must be chronological, even through Swedish
+    # DST folds where the local wall clock moves backwards. Reject overlaps
+    # before they are cached, rather than deferring the failure to optimize().
+    result.sort(key=lambda interval: interval.start.astimezone(UTC))
+    for previous, following in zip(result, result[1:], strict=False):
+        if previous.end.astimezone(UTC) > following.start.astimezone(UTC):
+            raise ValueError("Overlapping Nord Pool price intervals")
     return result
 
 
