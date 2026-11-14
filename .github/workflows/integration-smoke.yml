@@ -33,7 +33,7 @@ jobs:
       - name: Run all tests and measure integration coverage
         run: pytest -q tests --cov=custom_components.price_aware_thermostat --cov-report=term-missing
       - name: Check code quality
-        run: ruff check custom_components/price_aware_thermostat tests/integration
+        run: ruff check custom_components/price_aware_thermostat tests/integration benchmarks tests/test_benchmark.py
 
       - name: Strict type checking
         run: mypy custom_components/price_aware_thermostat
