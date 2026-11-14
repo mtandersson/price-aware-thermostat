@@ -54,7 +54,8 @@ Assistant instance.
   price used plus source entry, market area, weighted future price and freshness.
 - Public custom-repository installation through the built-in Marketplace on
   Home Assistant 2026.11+, with default-branch installation and no catalog
-  submission or tagged release.
+  submission or tagged release (Settings → Marketplace → Add from link).
+- Sandbox evaluation summary in the AC evaluation guide.
 
 - Bounded price-action (30 s) and switch/climate-action (10 s) waits, with
   cancellation and retry/corrective-OFF regressions (#12).

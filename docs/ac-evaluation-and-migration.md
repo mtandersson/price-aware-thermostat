@@ -168,6 +168,26 @@ The pump target compared here includes the heating/cooling compensation, so it
 will differ from the room target by design. Reported HVAC mode shows what the
 backend says; it is not measured compressor runtime and not an energy meter.
 
+### 1.4 Sandbox evaluation (2026-11)
+
+A disposable local Home Assistant 2026.11 with demo devices and the official
+Nord Pool integration (SE4, SEK, live data) was run with every entry in shadow
+mode. Observed:
+
+- The config flow rejected invalid input.
+- 13 scripted service calls produced 0 backend writes, for both the climate
+  and the switch control type.
+- In headless Chromium, the thermostat card sent one debounced
+  `set_temperature` for three + presses; heat/cool/off and the more-info dialog
+  worked with 0 backend writes.
+- The options flow, reload and restart preserved state.
+- Repairs appeared when the Nord Pool integration was removed.
+- The diagnostics download worked.
+
+The evaluation also produced findings #41 and #42. Not verified: live AC
+control on real equipment, HomeKit/Matter exporters, and retry/rollback on real
+hardware. This sandbox run does not establish device compatibility or savings.
+
 ## 2. HomeKit and Matter compatibility
 
 What is **verified**: the wrapper is a standard Home Assistant `climate` entity.

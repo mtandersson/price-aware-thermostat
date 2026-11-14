@@ -8,12 +8,23 @@
 
 ## Custom installation (no release needed)
 
-On Home Assistant 2026.11+, open Settings → Marketplace, then Custom repositories
-in its menu. Add `https://github.com/mtandersson/price-aware-thermostat` as
-**Integration**. Install **Price-Aware Thermostat** from **main**. Marketplace
-uses the default branch when there are no GitHub releases. Restart if prompted,
-then add the integration under Settings → Devices & services. Every new entry
-starts in shadow mode; verify it before changing the wrapper mode or target.
+On Home Assistant 2026.11+ (verified on 2026.11.1):
+
+1. Settings → Marketplace → the **Add from link** tab.
+2. Paste `https://github.com/mtandersson/price-aware-thermostat` into
+   **GitHub link**, then **Add**. No category is asked for. A GitHub connection
+   is required; the dialog asks you to connect if needed.
+3. Open **Price-Aware Thermostat** and install from the default branch `main`.
+   No release or tag exists or is needed.
+4. Restart when prompted, then Settings → Devices & services → Add integration.
+
+The Marketplace menu (⋮) → **Custom repositories** lists repositories added
+this way. Classic HACS on older Home Assistant: HACS → Custom repositories,
+category **Integration**.
+
+Every new entry starts in shadow mode; verify it before changing the wrapper
+mode or target. Turning shadow mode off asks for the safety confirmation once
+per entry. Settings are described in [settings.md](settings.md).
 
 Use the isolated evaluation guides before selecting real equipment. Existing
 controllers keep ownership during shadow evaluation. Public repository visibility
@@ -78,20 +89,16 @@ them without a separate explicit owner decision to publish a tagged release.
    - `mypy custom_components/price_aware_thermostat`
 3. Bump `version` in `custom_components/price_aware_thermostat/manifest.json`.
 4. Move `CHANGELOG.md` Unreleased entries under the new version and date.
-5. Merge to `main`. The HACS check cannot run while the repository is private;
-   the release must not proceed until the HACS validation passes on a public
-   repository, and hassfest passes too.
+5. Merge to `main`; the HACS and hassfest checks must pass on that commit.
 6. Tag `vX.Y.Z` matching the manifest version and create a GitHub release.
-7. HACS custom-repository install (public repository only; HACS cannot add a
-   private one): in HACS choose Custom repositories, add the repository URL
-   with type **Integration**, download the release, restart Home Assistant,
-   then add the integration under Settings, Devices & services.
+7. Install as described under [Custom installation](#custom-installation-no-release-needed),
+   selecting the new release instead of `main`.
 
 ## Upgrade notes
 
 1. Take a Home Assistant backup first.
 2. Read the changelog for the target version.
-3. Update through HACS (or replace the folder), restart Home Assistant.
+3. Update through Marketplace/HACS (or replace the folder), restart Home Assistant.
 4. Confirm new or migrated entries remain in shadow mode before changing anything.
 5. Config entries at version 1 migrate to version 2 with
    `control_type: switch`; entity IDs and settings are preserved.
@@ -116,7 +123,7 @@ Remove:
    under your independent thermostat). Put the entry in shadow mode.
 2. Take a backup.
 3. Delete the integration entry under Devices & services, remove the
-   folder (or uninstall via HACS), restart Home Assistant.
+   folder (or remove it in Marketplace/HACS), restart Home Assistant.
 4. Re-enable the original thermostat or automation for the heater.
 
 Rollback:
