@@ -13,6 +13,21 @@ preview**, exposing off mode and an editable base target without actuator
 commands. AC optimization and live control are tracked in #21 and #23.
 See [control types and backend contract](docs/control-types.md).
 
+## HACS (not yet available)
+
+The repository carries HACS metadata, but no release exists, HACS validation is
+unverified (the HACS check cannot run on a private repository) and HACS cannot
+add a private repository. Only after the owner makes the repository public and
+publishes a release could it be added as a custom repository of type
+**Integration**. See [release policy and procedures](docs/release.md).
+
+## Release status
+
+Pre-release, ungraded development preview, not approved for controlling
+production heaters. Tested versions, the status matrix, upgrade, removal
+and rollback procedures, and the pending license decision are in
+[docs/release.md](docs/release.md). See also the [changelog](CHANGELOG.md).
+
 ## Features
 
 - Home Assistant `ClimateEntity` for a temperature sensor and a heating switch.

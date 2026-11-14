@@ -1,21 +1,21 @@
 {
   "domain": "price_aware_thermostat",
   "name": "Price-Aware Thermostat",
-  "version": "0.2.0",
-  "config_flow": true,
-  "documentation": "https://github.com/mtandersson/price-aware-thermostat",
-  "issue_tracker": "https://github.com/mtandersson/price-aware-thermostat/issues",
+  "after_dependencies": [
+    "nordpool"
+  ],
   "codeowners": [
     "@mtandersson"
   ],
+  "config_flow": true,
   "dependencies": [
     "climate",
     "sensor",
     "switch"
   ],
-  "after_dependencies": [
-    "nordpool"
-  ],
+  "documentation": "https://github.com/mtandersson/price-aware-thermostat",
   "integration_type": "helper",
-  "iot_class": "local_polling"
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/mtandersson/price-aware-thermostat/issues",
+  "version": "0.2.0"
 }
