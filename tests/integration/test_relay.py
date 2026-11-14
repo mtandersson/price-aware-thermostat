@@ -5,8 +5,9 @@ These tests register mock switch actions and never reach physical hardware.
 
 from unittest.mock import patch
 
-from homeassistant.core import HomeAssistant
-from pytest_homeassistant.common import MockConfigEntry, async_mock_service
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.setup import async_setup_component
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.price_aware_thermostat.const import (
     CONF_AREA,
@@ -47,8 +48,18 @@ async def test_live_control_turns_on_only_for_valid_cold_sensor(hass: HomeAssist
     entry = make_entry(hass, shadow=False)
     hass.states.async_set("sensor.safety_temperature", "4.0")
     hass.states.async_set("switch.safety_heater", "off")
-    on = async_mock_service(hass, "switch", "turn_on")
-    off = async_mock_service(hass, "switch", "turn_off")
+    assert await async_setup_component(hass, "switch", {})
+    on: list[ServiceCall] = []
+    off: list[ServiceCall] = []
+
+    async def on_service(call: ServiceCall) -> None:
+        on.append(call)
+
+    async def off_service(call: ServiceCall) -> None:
+        off.append(call)
+
+    hass.services.async_register("switch", "turn_on", on_service)
+    hass.services.async_register("switch", "turn_off", off_service)
 
     with patch(
         "custom_components.price_aware_thermostat.coordinator."
@@ -67,8 +78,18 @@ async def test_invalid_temperature_forces_off_when_live(hass: HomeAssistant) -> 
     entry = make_entry(hass, shadow=False)
     hass.states.async_set("sensor.safety_temperature", "unavailable")
     hass.states.async_set("switch.safety_heater", "on")
-    on = async_mock_service(hass, "switch", "turn_on")
-    off = async_mock_service(hass, "switch", "turn_off")
+    assert await async_setup_component(hass, "switch", {})
+    on: list[ServiceCall] = []
+    off: list[ServiceCall] = []
+
+    async def on_service(call: ServiceCall) -> None:
+        on.append(call)
+
+    async def off_service(call: ServiceCall) -> None:
+        off.append(call)
+
+    hass.services.async_register("switch", "turn_on", on_service)
+    hass.services.async_register("switch", "turn_off", off_service)
 
     with patch(
         "custom_components.price_aware_thermostat.coordinator."
