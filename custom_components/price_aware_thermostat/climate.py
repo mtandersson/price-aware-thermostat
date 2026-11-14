@@ -183,6 +183,8 @@ class PriceAwareThermostat(RestoreClimate):
                 result.price_difference_sek_per_kwh if result else None
             ),
             "future_coverage_fraction": result.future_coverage_fraction if result else 0.0,
+            "requested_adjustment_c": result.requested_adjustment_c if result else 0.0,
+            "adjustment_clamped": result.clamped if result else False,
             "optimization_reason": (
                 "off"
                 if self._attr_hvac_mode == HVACMode.OFF
