@@ -38,12 +38,14 @@ class RelayCommandGuard:
         required even if the observed relay is already at the desired state.
         """
         if desired == observed:
-            return self.pending_state is not None and self.pending_state != desired
+            # Correct an unacknowledged ON command with OFF; never bypass
+            # minimum-cycle protection to reassert heating over a pending OFF.
+            return self.pending_state is True and not desired
         if self.pending_state == desired and self.last_command_monotonic is not None:
             return now - self.last_command_monotonic >= self.retry_seconds
         return True
 
-    def record_sent(self, desired: bool, now: float) -> None:
-        """Remember a successful service dispatch; await an observed-state ACK."""
+    def record_attempt(self, desired: bool, now: float) -> None:
+        """Throttle repeated service attempts until an observed-state ACK."""
         self.pending_state = desired
         self.last_command_monotonic = now
