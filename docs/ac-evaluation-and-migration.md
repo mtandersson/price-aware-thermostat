@@ -134,7 +134,7 @@ cards:
       - entity: sensor.ac_observed_pump_target
       - entity: sensor.ac_proposed_pump_target
   - type: history-graph
-    title: Mode: existing control vs proposal
+    title: "Mode: existing control vs proposal"
     hours_to_show: 48
     entities:
       - entity: sensor.ac_observed_mode
