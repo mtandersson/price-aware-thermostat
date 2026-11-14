@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta
 import logging
+from datetime import timedelta
 from math import isfinite
 from typing import Any
 
@@ -16,7 +16,13 @@ from homeassistant.components.climate import (
     RestoreClimate,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN, UnitOfTemperature
+from homeassistant.const import (
+    STATE_OFF,
+    STATE_ON,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
+    UnitOfTemperature,
+)
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -34,8 +40,8 @@ from .const import (
     CONF_MAX_TEMP,
     CONF_MIN_CYCLE,
     CONF_MIN_TEMP,
-    CONF_SENSOR,
     CONF_SENSITIVITY,
+    CONF_SENSOR,
     CONF_SHADOW,
     DEFAULTS,
 )
