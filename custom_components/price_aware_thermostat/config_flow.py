@@ -120,8 +120,13 @@ class PriceAwareThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
             source = self.hass.config_entries.async_get_entry(
                 user_input[CONF_NORDPOOL_ENTRY]
             )
+            area = str(user_input[CONF_AREA]).strip().upper()
             if source is None or source.domain != "nordpool":
                 errors["base"] = "invalid_price_source"
+            elif not area or area not in {
+                str(known_area).upper() for known_area in source.data.get("areas", ())
+            }:
+                errors["base"] = "invalid_market_area"
             elif _invalid_settings(user_input):
                 errors["base"] = "invalid_temperature_range"
             elif user_input[CONF_HEATER] == user_input[CONF_SENSOR]:
@@ -133,7 +138,7 @@ class PriceAwareThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
                     title=user_input[CONF_NAME],
-                    data={**user_input, CONF_AREA: user_input[CONF_AREA].strip().upper()},
+                    data={**user_input, CONF_AREA: area},
                     options={CONF_SHADOW: True},
                 )
 
