@@ -118,6 +118,9 @@ class PriceAwareThermostat(RestoreClimate):
         self._sensor_fresh = False
         self._control_lock = asyncio.Lock()
         self._relay_guard = RelayCommandGuard()
+        self._evaluation_task: asyncio.Task[None] | None = None
+        self._evaluation_requested = False
+        self._unloading = False
 
     @property
     def _base_target(self) -> float:
@@ -184,8 +187,28 @@ class PriceAwareThermostat(RestoreClimate):
 
     @callback
     def _queue_evaluation(self, *_args: Any) -> None:
-        """Schedule one async evaluation, serialized by a lock."""
-        self.hass.async_create_task(self._async_evaluate())
+        """Coalesce event bursts into one lifecycle-bound evaluation worker."""
+        if self._unloading:
+            return
+        self._evaluation_requested = True
+        if self._evaluation_task is None or self._evaluation_task.done():
+            self._evaluation_task = self.hass.async_create_task(
+                self._async_process_evaluations()
+            )
+
+    async def _async_process_evaluations(self) -> None:
+        """Recalculate once per burst, with one follow-up for in-flight events."""
+        while self._evaluation_requested and not self._unloading:
+            self._evaluation_requested = False
+            await self._async_evaluate()
+
+    @callback
+    def _cancel_evaluation_task(self) -> None:
+        """Cancel queued work when Home Assistant removes the climate entity."""
+        self._unloading = True
+        self._evaluation_requested = False
+        if self._evaluation_task is not None and not self._evaluation_task.done():
+            self._evaluation_task.cancel()
 
     @callback
     def _state_changed(self, event: Event[EventStateChangedData]) -> None:
@@ -202,6 +225,7 @@ class PriceAwareThermostat(RestoreClimate):
             if old.attributes.get("preset_mode") == PRESET_FIXED:
                 self._attr_preset_mode = PRESET_FIXED
 
+        self.async_on_remove(self._cancel_evaluation_task)
         self.async_on_remove(
             async_track_state_change_event(
                 self.hass, [self._sensor, self._heater], self._state_changed
@@ -283,8 +307,11 @@ class PriceAwareThermostat(RestoreClimate):
 
             # In shadow mode *no switch services are called*, even if the sensor
             # is missing or the user explicitly selects HVAC off.
-            if not self._shadow and heater_state is not None and heater_state.state in (
-                STATE_ON, STATE_OFF,
+            if (
+                not self._shadow
+                and not self._unloading
+                and heater_state is not None
+                and heater_state.state in (STATE_ON, STATE_OFF)
             ):
                 # A successful service call is not a physical acknowledgment.
                 # Only an observed relay state clears a pending command.
