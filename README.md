@@ -13,6 +13,19 @@ preview**, exposing off mode and an editable base target without actuator
 commands. AC optimization and live control are tracked in #21 and #23.
 See [control types and backend contract](docs/control-types.md).
 
+## Installation via HACS (custom repository)
+
+The repository carries HACS metadata, but no release exists yet. Once the owner
+publishes one, it can be added in HACS as a custom repository of type
+**Integration**. See [release policy and procedures](docs/release.md).
+
+## Release status
+
+Pre-release, ungraded and not approved for controlling production heaters.
+Supported Home Assistant/Python versions, the support matrix, upgrade, removal
+and rollback procedures, and the pending license decision are in
+[docs/release.md](docs/release.md). See also the [changelog](CHANGELOG.md).
+
 ## Features
 
 - Home Assistant `ClimateEntity` for a temperature sensor and a heating switch.
