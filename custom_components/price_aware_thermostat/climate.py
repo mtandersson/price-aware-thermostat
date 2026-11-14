@@ -60,6 +60,10 @@ _LOGGER = logging.getLogger(__name__)
 PRESET_PRICE_AWARE = "price_aware"
 PRESET_FIXED = "fixed"
 
+# Serialize climate entity service calls; scheduled evaluations are also
+# coalesced per entity and guarded by an async lock.
+PARALLEL_UPDATES = 1
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -74,6 +78,7 @@ async def async_setup_entry(
 class PriceAwareThermostat(RestoreClimate):
     """Local thermostat that can use future electricity prices to shift heat."""
 
+    _attr_has_entity_name = True
     _attr_should_poll = False
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE
