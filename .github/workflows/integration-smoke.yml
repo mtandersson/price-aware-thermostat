@@ -31,7 +31,7 @@ jobs:
           print("Home Assistant import checks passed")
           PY
       - name: Run all tests and measure integration coverage
-        run: pytest -q tests --cov=custom_components.price_aware_thermostat --cov-report=term-missing
+        run: pytest -q tests --cov=custom_components.price_aware_thermostat --cov-report=term-missing --cov-fail-under=95
       - name: Check code quality
         run: ruff check custom_components/price_aware_thermostat tests/integration benchmarks tests/test_benchmark.py
 

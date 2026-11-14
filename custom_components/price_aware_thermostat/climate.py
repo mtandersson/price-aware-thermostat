@@ -24,7 +24,7 @@ from homeassistant.const import (
     UnitOfTemperature,
 )
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
 from homeassistant.util import dt as dt_util
@@ -68,6 +68,7 @@ from .const import (
     CONF_WINDOW_SENSORS,
     CONTROL_CLIMATE,
     DEFAULTS,
+    DOMAIN,
 )
 from .control import (
     desired_heater_state,
@@ -439,7 +440,14 @@ class PriceAwareThermostat(RestoreClimate):
             return
         temperature = float(value)
         if not isfinite(temperature) or not self._attr_min_temp <= temperature <= self._attr_max_temp:
-            raise HomeAssistantError("Temperature is outside the configured limits")
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="temperature_out_of_range",
+                translation_placeholders={
+                    "min_temp": str(self._attr_min_temp),
+                    "max_temp": str(self._attr_max_temp),
+                },
+            )
         self._attr_native_target_temperature = temperature
         # A user-set base target persists over Home Assistant restarts.
         self.hass.config_entries.async_update_entry(
@@ -452,7 +460,11 @@ class PriceAwareThermostat(RestoreClimate):
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Select heating or turn off only on explicit user action."""
         if hvac_mode not in self._attr_hvac_modes:
-            raise HomeAssistantError("Unsupported HVAC mode")
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="unsupported_hvac_mode",
+                translation_placeholders={"hvac_mode": str(hvac_mode)},
+            )
         self._attr_hvac_mode = hvac_mode
         await self._async_evaluate()
         self.async_write_ha_state()
@@ -460,7 +472,11 @@ class PriceAwareThermostat(RestoreClimate):
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Switch between a price-aware setpoint and a fixed setpoint."""
         if preset_mode not in self._attr_preset_modes:
-            raise HomeAssistantError("Unsupported thermostat preset")
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="unsupported_preset_mode",
+                translation_placeholders={"preset_mode": str(preset_mode)},
+            )
         self._attr_preset_mode = preset_mode
         await self._async_evaluate()
         self.async_write_ha_state()

@@ -115,5 +115,16 @@
         "climate": "Heat pump / AC climate"
       }
     }
+  },
+  "exceptions": {
+    "temperature_out_of_range": {
+      "message": "The temperature must be between {min_temp} and {max_temp} degrees (the configured limits)."
+    },
+    "unsupported_hvac_mode": {
+      "message": "The HVAC mode {hvac_mode} is not supported by this thermostat."
+    },
+    "unsupported_preset_mode": {
+      "message": "The preset {preset_mode} is not supported by this thermostat."
+    }
   }
 }
