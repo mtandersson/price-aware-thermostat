@@ -37,7 +37,7 @@ def entities(hass: HomeAssistant) -> None:
     hass.states.async_set("sensor.room", "21", {"unit_of_measurement": "°C"})
     hass.states.async_set("climate.pump", "off", {
         "hvac_modes": ["heat", "cool", "off"], "min_temp": 10, "max_temp": 31,
-        "target_temp_step": 0.5, "temperature": 22,
+        "target_temp_step": 0.5, "temperature": 22, "supported_features": 1,
     })
 
 
@@ -108,6 +108,7 @@ async def test_invalid_backend_selection(
     ({"hvac_modes": ["heat", "cool"]}, "invalid_hvac_modes"),
     ({"min_temp": 40}, "invalid_backend_limits"),
     ({"target_temp_step": 0}, "invalid_backend_limits"),
+    ({"supported_features": 0}, "invalid_backend_limits"),
     ({"max_temp": float("nan")}, "invalid_backend_limits"),
 ])
 async def test_backend_capability_validation(
@@ -265,3 +266,49 @@ async def test_switch_shadow_retarget_frees_previous_actuator(hass: HomeAssistan
     result = await hass.config_entries.flow.async_configure(flow["flow_id"], data)
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_HEATER] == "switch.old"
+
+
+async def test_loaded_climate_options_reload_rebinds_without_commands(hass: HomeAssistant) -> None:
+    entities(hass)
+    original = hass.states.get("climate.pump")
+    assert original
+    hass.states.async_set("climate.other", "off", dict(original.attributes))
+    hass.states.async_set("sensor.other", "19", {"unit_of_measurement": "°C"})
+    entry = MockConfigEntry(
+        domain=DOMAIN, version=2, title="Room AC", unique_id="climate.pump",
+        data=settings(), options={CONF_SHADOW: True, CONF_BASE_TEMP: 23},
+    )
+    entry.add_to_hass(hass)
+    calls = [async_mock_service(hass, domain, service) for domain, service in [
+        ("switch", "turn_on"), ("switch", "turn_off"),
+        ("climate", "set_temperature"), ("climate", "set_hvac_mode"),
+        ("climate", "turn_on"), ("climate", "turn_off"),
+    ]]
+    with patch(
+        "custom_components.price_aware_thermostat.coordinator."
+        "NordPoolPriceCoordinator._async_update_data", return_value=(),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        registry = er.async_get(hass)
+        wrapper = registry.async_get("climate.room_ac")
+        assert wrapper
+        wrapper_unique_id = wrapper.unique_id
+        flow = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(flow["flow_id"], {
+            CONF_HEATER: "climate.other", CONF_SENSOR: "sensor.other", CONF_SHADOW: True,
+        })
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+        await hass.async_block_till_done()
+        state = hass.states.get("climate.room_ac")
+        assert state
+        assert state.attributes["backend_entity_id"] == "climate.other"
+        assert state.attributes["current_temperature"] == 19
+        assert state.attributes["temperature"] == 23
+        assert registry.async_get("climate.room_ac").unique_id == wrapper_unique_id
+        # Old sources no longer update the reloaded wrapper.
+        hass.states.async_set("sensor.room", "10", {"unit_of_measurement": "°C"})
+        await hass.async_block_till_done()
+        assert hass.states.get("climate.room_ac").attributes["current_temperature"] == 19
+        assert all(not group for group in calls)
+        assert await hass.config_entries.async_unload(entry.entry_id)

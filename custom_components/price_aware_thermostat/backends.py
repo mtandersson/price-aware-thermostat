@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from math import isfinite
 from typing import Any
 
+from homeassistant.components.climate import ClimateEntityFeature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
@@ -94,6 +95,8 @@ def validate_backend(
     ):
         return "invalid_hvac_modes"
     try:
+        if not int(actuator.attributes.get("supported_features", 0)) & ClimateEntityFeature.TARGET_TEMPERATURE:
+            return "invalid_backend_limits"
         minimum = float(actuator.attributes["min_temp"])
         maximum = float(actuator.attributes["max_temp"])
         step = float(actuator.attributes.get("target_temp_step", 1.0))

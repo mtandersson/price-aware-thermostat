@@ -38,7 +38,7 @@
       "recursive_backend": "A Price-Aware Thermostat climate cannot control itself or another instance.",
       "already_configured": "This actuator already has a Price-Aware Thermostat instance.",
       "invalid_hvac_modes": "Select heat/cool modes supported by the backend, which must also support off.",
-      "invalid_backend_limits": "The climate must report finite, ordered temperature limits and a positive target step.",
+      "invalid_backend_limits": "The climate must support a target temperature and report finite, ordered temperature limits and a positive target step.",
       "climate_live_not_supported": "AC/climate control is a shadow-only configuration preview. Live control is not implemented yet."
     },
     "abort": {
@@ -79,7 +79,7 @@
       "recursive_backend": "A Price-Aware Thermostat climate cannot control itself or another instance.",
       "already_configured": "This actuator already has a Price-Aware Thermostat instance.",
       "invalid_hvac_modes": "Select heat/cool modes supported by the backend, which must also support off.",
-      "invalid_backend_limits": "The climate must report finite, ordered temperature limits and a positive target step.",
+      "invalid_backend_limits": "The climate must support a target temperature and report finite, ordered temperature limits and a positive target step.",
       "climate_live_not_supported": "AC/climate control is a shadow-only configuration preview. Live control is not implemented yet.",
       "actuator_handoff_required": "Before changing the actuator, save shadow mode, confirm the previous switch is off, and keep the new actuator in shadow mode."
     }
