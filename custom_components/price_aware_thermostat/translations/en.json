@@ -95,7 +95,7 @@
     "step": {
       "init": {
         "title": "Thermostat settings",
-        "description": "Switching from shadow mode to live control requires a one-time safety confirmation; it is remembered until shadow mode is turned on again. Shadow mode calculates and shows proposed decisions without sending commands. The price source is the Nord Pool integration entry; future prices are fetched via its action. Price adjustment is relative to the target you set (\u00b1 the maximum price adjustment); minimum and maximum are absolute safety limits. Full explanation of every setting, with examples: https://github.com/mtandersson/price-aware-thermostat/blob/main/docs/settings.md",
+        "description": "Switching from shadow mode to live control requires a one-time safety confirmation; it is remembered until shadow mode is turned on again. Shadow mode calculates and shows proposed decisions without sending commands. The price source is the Nord Pool integration entry; future prices are fetched via its action. Price adjustment is relative to the target you set (\u00b1 the maximum price adjustment); minimum and maximum are absolute safety limits. Full explanation of every setting, with examples: {settings_url}",
         "data": {
           "base_temperature": "Base temperature (\u00b0C)",
           "minimum_temperature": "Minimum allowed target (\u00b0C, absolute safety limit)",

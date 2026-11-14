@@ -95,7 +95,7 @@
     "step": {
       "init": {
         "title": "Termostatinställningar",
-        "description": "Att gå från skuggläge till live-styrning kräver en engångsbekräftelse av säkerheten; den sparas tills skuggläget slås på igen. Skuggläget beräknar och visar föreslagna beslut utan att skicka kommandon. Priskällan är Nord Pool-integrationens post; kommande priser hämtas via dess åtgärd. Prisjusteringen är relativ till målet du ställer in (± största prisjustering); lägsta och högsta är absoluta säkerhetsgränser. Fullständig förklaring av varje inställning, med exempel: https://github.com/mtandersson/price-aware-thermostat/blob/main/docs/settings.md",
+        "description": "Att gå från skuggläge till live-styrning kräver en engångsbekräftelse av säkerheten; den sparas tills skuggläget slås på igen. Skuggläget beräknar och visar föreslagna beslut utan att skicka kommandon. Priskällan är Nord Pool-integrationens post; kommande priser hämtas via dess åtgärd. Prisjusteringen är relativ till målet du ställer in (± största prisjustering); lägsta och högsta är absoluta säkerhetsgränser. Fullständig förklaring av varje inställning, med exempel: {settings_url}",
         "data": {
           "base_temperature": "Grundtemperatur (°C)",
           "minimum_temperature": "Lägsta tillåtna mål (°C, absolut säkerhetsgräns)",

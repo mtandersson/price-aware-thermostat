@@ -55,6 +55,15 @@ def test_english_matches_strings_json() -> None:
     assert _load("en.json") == strings
 
 
+def test_no_translation_contains_a_url() -> None:
+    """Hassfest rejects URLs in strings; links must use description placeholders."""
+    for name in ("en.json", "sv.json"):
+        for path, value in _leaves(_load(name)).items():
+            assert "://" not in value, f"{name}{path}"
+    for name in ("en.json", "sv.json"):
+        assert "{settings_url}" in _load(name)["options"]["step"]["init"]["description"]
+
+
 def test_every_form_field_has_a_description() -> None:
     english = _load("en.json")
     for section, step_id in FORM_STEPS:

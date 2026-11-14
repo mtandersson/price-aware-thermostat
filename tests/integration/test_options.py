@@ -20,7 +20,17 @@ from custom_components.price_aware_thermostat.const import (
     CONF_SENSITIVITY,
     CONF_SHADOW,
     DOMAIN,
+    SETTINGS_URL,
 )
+
+
+async def test_options_form_provides_settings_url_placeholder(hass: HomeAssistant) -> None:
+    """The options description links the docs through a placeholder, not a raw URL."""
+    entry = MockConfigEntry(domain=DOMAIN, title="Test thermostat", data={})
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["description_placeholders"] == {"settings_url": SETTINGS_URL}
+    assert SETTINGS_URL.endswith("/docs/settings.md")
 
 
 def _settings(*, shadow: bool, acknowledged: bool) -> dict[str, object]:
