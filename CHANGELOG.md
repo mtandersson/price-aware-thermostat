@@ -27,6 +27,16 @@ Assistant instance.
   again. The minimum and maximum still apply as absolute limits. See
   [docs/settings.md](docs/settings.md#maximum-price-deviation).
 
+### Fixed
+
+- A climate entity whose registry name was customised kept its friendly name
+  after the per-entry device was added, instead of becoming
+  "<entry title> <custom name>" (#46). Config entry migration to 2.3 moves the
+  custom name to the device's user-set name and clears the entity name, once.
+  It changes nothing when the device already has a user-set name, and never
+  changes the entity_id. The price sensor is then named "<custom name>
+  Electricity price".
+
 ### Added
 
 - Field help texts for every setup, reconfigure and options field, a
