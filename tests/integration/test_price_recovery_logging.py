@@ -20,6 +20,7 @@ async def test_price_outage_and_recovery_are_logged_once(
         domain=DOMAIN,
         data={CONF_AREA: "SE4", CONF_NORDPOOL_ENTRY: "fake-entry"},
     )
+    entry.add_to_hass(hass)
     coordinator = NordPoolPriceCoordinator(hass, entry)
     status = {"unavailable": True}
 

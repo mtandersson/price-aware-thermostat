@@ -5,18 +5,12 @@
 > project is a pre-release, ungraded development preview, not approved for
 > controlling production heaters. Nothing below is a support commitment.
 
-## License: decision pending
+## License
 
-No `LICENSE` file exists and none has been chosen. This is the repository
-owner's decision and **blocks any public release or HACS default-store
-submission**, because without a license others have no right to use, modify or
-redistribute the code. Options:
-
-- **MIT**: very permissive, minimal obligations.
-- **Apache-2.0**: permissive with an explicit patent grant.
-- **GPL-3.0**: copyleft; common for Home Assistant integrations (Home
-  Assistant Core is Apache-2.0, many custom integrations use MIT or GPL).
-- **Keep private / no license**: no redistribution rights granted.
+The repository uses the [MIT license](../LICENSE), selected by the owner and
+merged in PR #36. [SECURITY.md](../SECURITY.md) explains private reporting;
+[CONTRIBUTING.md](../CONTRIBUTING.md) describes contribution checks. A license
+is not a supported-release or physical commissioning approval.
 
 ## HACS validation status: UNVERIFIED
 
@@ -49,7 +43,7 @@ says 0.1.0 and is not a release artefact.
 | Shadow mode (read-only evaluation, default for new installs) | Implemented, CI-tested |
 | Price optimizer, Nord Pool adapter, diagnostics | Implemented, CI-tested (shadow mode) |
 | Element / heating switch live control (shadow mode disabled) | Experimental; not commissioned on physical equipment |
-| Heat pump / AC climate type | Experimental; shadow-only configuration preview |
+| Heat pump / AC climate type | Experimental heat/cool/off controller; CI-tested, not commissioned on real equipment |
 | Frost protection, over-temperature protection, fail-safe on sensor loss | Requires independent hardware safety; never rely on this integration |
 | Unattended heating of production heaters | Not approved |
 

@@ -43,6 +43,7 @@ async def test_fetches_each_day_once_and_converts_prices(hass: HomeAssistant) ->
         "nordpool", "get_prices_for_date",
         fake_action, supports_response=SupportsResponse.ONLY,
     )
+    entry.add_to_hass(hass)
     coordinator = NordPoolPriceCoordinator(hass, entry)
     await coordinator.async_refresh()
     initial_calls = len(requested)
@@ -67,6 +68,7 @@ async def test_missing_prices_do_not_break_local_thermostat(hass: HomeAssistant)
         "nordpool", "get_prices_for_date",
         unavailable, supports_response=SupportsResponse.ONLY,
     )
+    entry.add_to_hass(hass)
     coordinator = NordPoolPriceCoordinator(hass, entry)
     await coordinator.async_refresh()
     assert coordinator.data == ()

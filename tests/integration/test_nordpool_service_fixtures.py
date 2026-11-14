@@ -30,6 +30,7 @@ def _setup(hass: HomeAssistant, handler: Any) -> NordPoolPriceCoordinator:
         domain=DOMAIN,
         data={CONF_AREA: "SE4", CONF_NORDPOOL_ENTRY: "mock-source"},
     )
+    entry.add_to_hass(hass)
     return NordPoolPriceCoordinator(hass, entry)
 
 

@@ -12,11 +12,15 @@ All notable changes are documented here. The format follows
 
 `0.2.0` in `manifest.json` is only a placeholder version, not a release: no tag
 or GitHub release exists. The entries below reflect `main`. Open before any
-release: license decision, HACS validation (unverified while the repository is
+release: HACS validation (unverified while the repository is
 private) and an install/upgrade/remove/rollback test in a disposable Home
 Assistant instance.
 
 ### Added
+
+- Engineering quality evidence for all 54 HA rules, actionable entry-specific
+  Nord Pool source repairs, full config-flow line/branch coverage and CI
+  enforcement of >95% coverage per integration module (#12).
 
 - Downloadable diagnostics v2: price cache freshness (last success, today/
   tomorrow cached, next retry) and coarse failure kinds; overlapping Nord Pool
@@ -26,8 +30,9 @@ Assistant instance.
   key order, a validation workflow, and release/status documentation.
 
 - Control type selection: **Element / heating switch** and **Heat pump / AC
-  climate**. The AC type is a shadow-only configuration preview (off mode,
-  editable base target, no actuator commands). See
+  climate**. The AC type supports heat/cool/off from an external room sensor,
+  with compensation, restart protection and window pauses. It starts in shadow
+  mode and has not been commissioned on physical equipment. See
   [docs/control-types.md](docs/control-types.md).
 - Config entry migration from version 1 to 2 (`control_type: switch`),
   preserving entry/entity IDs, setpoints, presets and shadow options.
