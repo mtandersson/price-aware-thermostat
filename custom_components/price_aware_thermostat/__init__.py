@@ -33,3 +33,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: PriceAwareConfigEntry) 
     from homeassistant.const import Platform
 
     return await hass.config_entries.async_unload_platforms(entry, [Platform.CLIMATE])
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: PriceAwareConfigEntry) -> bool:
+    """Add an explicit switch type without changing legacy options or IDs."""
+    from .const import CONF_CONTROL_TYPE, CONTROL_SWITCH
+
+    if entry.version > 2:
+        return False
+    if entry.version == 1:
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_CONTROL_TYPE: CONTROL_SWITCH}, version=2
+        )
+    return True

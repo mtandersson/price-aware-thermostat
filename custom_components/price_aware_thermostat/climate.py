@@ -29,13 +29,13 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
 from homeassistant.util import dt as dt_util
 
+from .backends import backend_from_settings
 from .config_entry import PriceAwareConfigEntry
 from .const import (
     CONF_BASE_TEMP,
     CONF_COLD_TOLERANCE,
     CONF_DEADBAND,
     CONF_FILTER,
-    CONF_HEATER,
     CONF_HOT_TOLERANCE,
     CONF_LOOKAHEAD,
     CONF_MAX_SENSOR_AGE,
@@ -45,6 +45,7 @@ from .const import (
     CONF_SENSITIVITY,
     CONF_SENSOR,
     CONF_SHADOW,
+    CONTROL_CLIMATE,
     DEFAULTS,
 )
 from .control import (
@@ -72,7 +73,9 @@ async def async_setup_entry(
 ) -> None:
     """Register one climate entity per integration entry."""
     coordinator: NordPoolPriceCoordinator = entry.runtime_data
-    async_add_entities([PriceAwareThermostat(entry, coordinator)])
+    backend = backend_from_settings({**entry.data, **entry.options})
+    entity_class = ClimateBackendPreview if backend.kind == CONTROL_CLIMATE else PriceAwareThermostat
+    async_add_entities([entity_class(entry, coordinator)])
 
 
 class PriceAwareThermostat(RestoreClimate):
@@ -95,8 +98,10 @@ class PriceAwareThermostat(RestoreClimate):
         self._entry = entry
         self._coordinator = coordinator
         settings = {**entry.data, **entry.options}
+        self._backend = backend_from_settings(settings)
+        self._attr_hvac_modes = [HVACMode(mode) for mode in self._backend.implemented_modes]
         self._sensor = str(settings[CONF_SENSOR])
-        self._heater = str(settings[CONF_HEATER])
+        self._heater = self._backend.entity_id
         self._shadow = bool(settings.get(CONF_SHADOW, True))
         self._min_cycle = int(settings.get(CONF_MIN_CYCLE, DEFAULTS[CONF_MIN_CYCLE]))
         self._max_sensor_age = timedelta(
@@ -313,7 +318,8 @@ class PriceAwareThermostat(RestoreClimate):
             # In shadow mode *no switch services are called*, even if the sensor
             # is missing or the user explicitly selects HVAC off.
             if (
-                not self._shadow
+                self._backend.supports_live_control
+                and not self._shadow
                 and not self._unloading
                 and heater_state is not None
                 and heater_state.state in (STATE_ON, STATE_OFF)
@@ -392,3 +398,52 @@ class PriceAwareThermostat(RestoreClimate):
         self._attr_preset_mode = preset_mode
         await self._async_evaluate()
         self.async_write_ha_state()
+
+
+class ClimateBackendPreview(PriceAwareThermostat):
+    """Configuration-only climate backend; no AC commands or pricing yet.
+
+    The relay implementation remains unchanged. AC demand, native target mapping
+    and cooling-aware pricing are deliberately deferred to issues #21/#23.
+    """
+
+    _attr_hvac_modes = [HVACMode.OFF]
+
+    def __init__(
+        self, entry: PriceAwareConfigEntry, coordinator: NordPoolPriceCoordinator
+    ) -> None:
+        super().__init__(entry, coordinator)
+        self._shadow = True
+        self._attr_hvac_mode = HVACMode.OFF
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str | float | bool | None]:
+        return {
+            "control_type": self._backend.kind,
+            "backend_entity_id": self._backend.entity_id,
+            "configured_hvac_modes": ",".join(self._backend.configured_modes),
+            "shadow_mode": True,
+            "live_control_supported": False,
+            "temperature_sample_fresh": self._sensor_fresh,
+            "effective_target_c": self._base_target,
+            "native_target_c": None,
+            "optimization_reason": "climate_backend_not_implemented",
+            "planned_heating": None,
+        }
+
+    async def _async_evaluate(self) -> None:
+        """Update external temperature only, even for forged live options."""
+        async with self._control_lock:
+            previous = (self._attr_native_current_temperature, self._sensor_fresh)
+            sensor = self.hass.states.get(self._sensor)
+            self._sensor_fresh = sensor is not None and is_temperature_sample_fresh(
+                getattr(sensor, "last_reported", None), dt_util.utcnow(), self._max_sensor_age
+            )
+            self._attr_native_current_temperature = (
+                parse_temperature_celsius(sensor.state, sensor.attributes.get("unit_of_measurement"))
+                if sensor is not None and self._sensor_fresh else None
+            )
+            self._sensor_fresh = self._attr_native_current_temperature is not None
+            self._planned_heating = None
+            if previous != (self._attr_native_current_temperature, self._sensor_fresh):
+                self.async_write_ha_state()

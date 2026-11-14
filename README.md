@@ -4,6 +4,15 @@ An experimental Home Assistant custom integration for on/off electric heaters th
 
 > **Development preview: not approved for unattended heating or frost protection.** The integration starts in **shadow mode** and never sends relay commands until a user explicitly disables shadow mode and confirms independent hardware safeguards. Keep your existing thermostat in service during development and evaluation.
 
+## Control types
+
+The existing **Element / heating switch** type retains storage-room regulation.
+The new **Heat pump / AC climate** type configures an external room sensor and
+an existing climate backend, but is currently a **shadow-only configuration
+preview**, exposing off mode and an editable base target without actuator
+commands. AC optimization and live control are tracked in #21 and #23.
+See [control types and backend contract](docs/control-types.md).
+
 ## Features
 
 - Home Assistant `ClimateEntity` for a temperature sensor and a heating switch.
@@ -51,13 +60,24 @@ The pure optimizer and hysteresis tests have no Home Assistant dependency:
 python -m unittest discover -s tests -v
 ```
 
-Home Assistant compatibility checks run against Home Assistant 2026.11.0 in CI with Python 3.14. To run them manually in a dedicated development environment:
+Home Assistant compatibility checks target Home Assistant 2026.11.0 and
+Python 3.14.2 or newer within the 3.14 series. For development with Nix and direnv:
 
 ```bash
-python -m pip install "homeassistant==2026.11.0" "pytest-homeassistant==2026.11.0" ruff
-pytest -q tests/integration
+direnv allow
+# Entering the directory loads the locked Nix shell and synchronizes .venv.
+pytest -q tests --cov=custom_components.price_aware_thermostat --cov-report=term-missing
 ruff check custom_components/price_aware_thermostat tests/integration
+mypy custom_components/price_aware_thermostat
 ```
+
+Without direnv, use `nix develop`; it loads the same environment. `flake.lock`
+pins Python and uv, while `uv.lock` pins the development dependencies. The shell
+runs `uv sync --frozen --only-group dev`; dependencies stay in the ignored
+project-local `.venv`. No Home Assistant installation is configured or modified.
+To intentionally update Python dependencies, run `uv lock --upgrade`, review the
+lock diff and rerun the checks. Pure tests above still run without HA on Python
+3.12/3.13 as tested in CI.
 
 Development work is tracked in [GitHub issues](https://github.com/mtandersson/price-aware-thermostat/issues): [Nord Pool adapter (#2)](https://github.com/mtandersson/price-aware-thermostat/issues/2), [configuration (#3)](https://github.com/mtandersson/price-aware-thermostat/issues/3), [safe climate control (#4)](https://github.com/mtandersson/price-aware-thermostat/issues/4), [shadow diagnostics (#5)](https://github.com/mtandersson/price-aware-thermostat/issues/5), [commissioning (#6)](https://github.com/mtandersson/price-aware-thermostat/issues/6), and [benchmarking (#7)](https://github.com/mtandersson/price-aware-thermostat/issues/7).
 
