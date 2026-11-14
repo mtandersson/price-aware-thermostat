@@ -46,7 +46,11 @@ from .const import (
     CONF_SHADOW,
     DEFAULTS,
 )
-from .control import desired_heater_state, is_temperature_sample_fresh
+from .control import (
+    desired_heater_state,
+    is_temperature_sample_fresh,
+    parse_temperature_celsius,
+)
 from .coordinator import NordPoolPriceCoordinator
 from .optimizer import OptimizationResult, OptimizerConfig, optimize
 
@@ -207,14 +211,13 @@ class PriceAwareThermostat(RestoreClimate):
                 )
             )
             if self._sensor_fresh and temp_state is not None and temp_state.state not in (
-                STATE_UNKNOWN, STATE_UNAVAILABLE,
+                STATE_UNKNOWN,
+                STATE_UNAVAILABLE,
             ):
-                try:
-                    value = float(temp_state.state)
-                    if isfinite(value):
-                        self._attr_native_current_temperature = value
-                except ValueError:
-                    pass
+                unit = temp_state.attributes.get("unit_of_measurement")
+                self._attr_native_current_temperature = parse_temperature_celsius(
+                    temp_state.state, unit if isinstance(unit, str) else None
+                )
             self._sensor_fresh = (
                 self._sensor_fresh and self._attr_native_current_temperature is not None
             )
