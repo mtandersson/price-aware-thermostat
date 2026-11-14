@@ -278,6 +278,7 @@ class PriceAwareThermostat(RestoreClimate):
             options={**self._entry.options, CONF_BASE_TEMP: temperature},
         )
         await self._async_evaluate()
+        self.async_write_ha_state()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Select heating or turn off only on explicit user action."""
@@ -285,6 +286,7 @@ class PriceAwareThermostat(RestoreClimate):
             raise HomeAssistantError("Unsupported HVAC mode")
         self._attr_hvac_mode = hvac_mode
         await self._async_evaluate()
+        self.async_write_ha_state()
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Switch between a price-aware setpoint and a fixed setpoint."""
@@ -292,3 +294,4 @@ class PriceAwareThermostat(RestoreClimate):
             raise HomeAssistantError("Unsupported thermostat preset")
         self._attr_preset_mode = preset_mode
         await self._async_evaluate()
+        self.async_write_ha_state()
