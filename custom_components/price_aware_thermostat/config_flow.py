@@ -187,6 +187,50 @@ class PriceAwareThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
         """Offer a settings flow with a safe default of shadow mode."""
         return PriceAwareThermostatOptionsFlow()
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Change only the Nord Pool source and market area, in shadow mode."""
+        entry = self._get_reconfigure_entry()
+        values = {**entry.data, **entry.options}
+        if not values.get(CONF_SHADOW, True):
+            return self.async_abort(reason="reconfigure_live_not_allowed")
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            source = self.hass.config_entries.async_get_entry(
+                user_input[CONF_NORDPOOL_ENTRY]
+            )
+            area = str(user_input[CONF_AREA]).strip().upper()
+            if source is None or source.domain != "nordpool":
+                errors["base"] = "invalid_price_source"
+            elif not area or area not in {
+                str(known_area).upper() for known_area in source.data.get("areas", ())
+            }:
+                errors["base"] = "invalid_market_area"
+            else:
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data_updates={
+                        CONF_NORDPOOL_ENTRY: user_input[CONF_NORDPOOL_ENTRY],
+                        CONF_AREA: area,
+                    },
+                )
+        current = user_input or entry.data
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema({
+                vol.Required(
+                    CONF_NORDPOOL_ENTRY, default=current.get(CONF_NORDPOOL_ENTRY)
+                ): selector.ConfigEntrySelector(
+                    selector.ConfigEntrySelectorConfig(integration="nordpool")
+                ),
+                vol.Required(
+                    CONF_AREA, default=current.get(CONF_AREA, "")
+                ): selector.TextSelector(),
+            }),
+            errors=errors,
+        )
+
 
 class PriceAwareThermostatOptionsFlow(OptionsFlowWithReload):
     """Manage settings and require safety confirmation before relay control."""

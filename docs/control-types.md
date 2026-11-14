@@ -44,6 +44,15 @@ mode. This prevents leaving a live old heater on without its controller. No
 automatic handoff command is sent. AC preview never owns its physical backend,
 so it does not require turning off an otherwise independently controlled pump.
 
+## Reconfiguring the price source
+
+Use the integration's **Reconfigure** action to move an entry to a different
+Nord Pool config entry and/or market area. It is allowed only while shadow mode
+is enabled and changes nothing else: the sensor, actuator, control type and
+other settings stay as they are, and entry/entity IDs are preserved. The source
+must be a `nordpool` entry that offers the chosen area, and the entry reloads
+on success. To change the sensor or actuator, use the options flow instead.
+
 ## AC preview behavior and next steps
 
 AC entries always remain in shadow mode, even if stored options are manually
