@@ -78,6 +78,14 @@ Do not run these steps without an explicit owner decision to release.
 4. Confirm new or migrated entries remain in shadow mode before changing anything.
 5. Config entries at version 1 migrate to version 2 with
    `control_type: switch`; entity IDs and settings are preserved.
+6. Config entries migrate to version 2.2: price adjustment becomes relative to
+   the user's target. Entries without a maximum price adjustment (or with an
+   empty one) get 0.8 °C. Entries that relied on the old implicit minimum/maximum
+   defaults (5.3/7.5 °C) get those values written explicitly, so an upgrade never
+   widens an existing entry's limits; only new entries default to 5.0/25.0 °C.
+   Note that a switch-type entry that previously used the whole min/max range for
+   price adjustment is now limited to ±0.8 °C around its target; raise the
+   maximum price adjustment in the options to restore a wider range.
 
 ## Remove and rollback
 

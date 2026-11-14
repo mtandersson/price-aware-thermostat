@@ -12,11 +12,19 @@ from pytest_homeassistant.common import MockConfigEntry
 from custom_components.price_aware_thermostat.const import (
     CONF_AREA,
     CONF_BASE_TEMP,
+    CONF_COLD_TOLERANCE,
+    CONF_DEADBAND,
+    CONF_FILTER,
     CONF_HEATER,
+    CONF_HOT_TOLERANCE,
+    CONF_LOOKAHEAD,
     CONF_MAX_DEVIATION,
+    CONF_MAX_SENSOR_AGE,
     CONF_MAX_TEMP,
+    CONF_MIN_CYCLE,
     CONF_MIN_TEMP,
     CONF_NORDPOOL_ENTRY,
+    CONF_SENSITIVITY,
     CONF_SENSOR,
     CONF_SHADOW,
     DEFAULTS,
@@ -113,15 +121,12 @@ async def test_missing_deviation_at_runtime_uses_default(hass: HomeAssistant) ->
 
 
 def _options(**extra: object) -> dict[str, object]:
-    values = {
-        key: DEFAULTS[key] for key in (
-            CONF_BASE_TEMP, CONF_MIN_TEMP, CONF_MAX_TEMP, CONF_MAX_DEVIATION,
-            "lookahead_minutes", "price_filter", "deadband_sek_per_kwh",
-            "sensitivity_c_per_sek_per_kwh", "cold_tolerance", "hot_tolerance",
-            "minimum_cycle_seconds", "max_sensor_age_minutes",
-        ) if key in DEFAULTS
-    }
-    return {**values, CONF_SHADOW: True, **extra}
+    keys = (
+        CONF_BASE_TEMP, CONF_MIN_TEMP, CONF_MAX_TEMP, CONF_MAX_DEVIATION, CONF_LOOKAHEAD,
+        CONF_FILTER, CONF_DEADBAND, CONF_SENSITIVITY, CONF_COLD_TOLERANCE,
+        CONF_HOT_TOLERANCE, CONF_MIN_CYCLE, CONF_MAX_SENSOR_AGE,
+    )
+    return {**{key: DEFAULTS[key] for key in keys}, CONF_SHADOW: True, **extra}
 
 
 @pytest.mark.parametrize("deviation", [None, -0.1, 20.1, "x"])
@@ -164,3 +169,17 @@ async def test_options_prefill_default_deviation_for_legacy_values(
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_MAX_DEVIATION] == 1.5
+
+
+@pytest.mark.parametrize(
+    ("deviation", "invalid"),
+    [(None, True), (True, True), ("x", True), (-0.1, True), (20.1, True),
+     (0, False), (0.8, False), (20, False)],
+)
+def test_cross_field_validation_of_the_deviation(deviation: object, invalid: bool) -> None:
+    """An explicitly empty deviation is rejected; 0 is the way to disable it."""
+    from custom_components.price_aware_thermostat.config_flow import _invalid_settings
+
+    settings = {CONF_MIN_TEMP: 5.0, CONF_BASE_TEMP: 6.0, CONF_MAX_TEMP: 25.0,
+                CONF_MAX_DEVIATION: deviation}
+    assert _invalid_settings(settings) is invalid

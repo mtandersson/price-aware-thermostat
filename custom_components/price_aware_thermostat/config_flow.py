@@ -11,7 +11,7 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
     OptionsFlowWithReload,
 )
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import selector
 from homeassistant.util import dt as dt_util
 
@@ -59,6 +59,36 @@ def _number(minimum: float, maximum: float, step: float = 0.1) -> selector.Numbe
             mode=selector.NumberSelectorMode.BOX,
         )
     )
+
+
+def _price_source_error(hass: HomeAssistant, user_input: dict[str, Any]) -> str | None:
+    """Validate the Nord Pool entry and market area the same way in every flow."""
+    source = hass.config_entries.async_get_entry(str(user_input[CONF_NORDPOOL_ENTRY]))
+    area = _area(user_input)
+    if source is None or source.domain != "nordpool":
+        return "invalid_price_source"
+    if not area or area not in {
+        str(known_area).upper() for known_area in source.data.get("areas", ())
+    }:
+        return "invalid_market_area"
+    return None
+
+
+def _area(user_input: dict[str, Any]) -> str:
+    """Normalize a market area code."""
+    return str(user_input[CONF_AREA]).strip().upper()
+
+
+def _price_source_schema(current: dict[str, Any]) -> dict[vol.Marker, Any]:
+    """The Nord Pool price source and market area fields."""
+    return {
+        vol.Required(
+            CONF_NORDPOOL_ENTRY, default=current.get(CONF_NORDPOOL_ENTRY)
+        ): selector.ConfigEntrySelector(
+            selector.ConfigEntrySelectorConfig(integration="nordpool")
+        ),
+        vol.Required(CONF_AREA, default=current.get(CONF_AREA, "")): selector.TextSelector(),
+    }
 
 
 def _deviation_default(initial: dict[str, Any]) -> float:
@@ -198,16 +228,9 @@ class PriceAwareThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
         """Set up a temperature sensor, heater switch, and Nord Pool source."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            source = self.hass.config_entries.async_get_entry(
-                user_input[CONF_NORDPOOL_ENTRY]
-            )
-            area = str(user_input[CONF_AREA]).strip().upper()
-            if source is None or source.domain != "nordpool":
-                errors["base"] = "invalid_price_source"
-            elif not area or area not in {
-                str(known_area).upper() for known_area in source.data.get("areas", ())
-            }:
-                errors["base"] = "invalid_market_area"
+            area = _area(user_input)
+            if error := _price_source_error(self.hass, user_input):
+                errors["base"] = error
             elif _invalid_settings(user_input):
                 errors["base"] = "invalid_temperature_range"
             elif error := validate_backend(self.hass, user_input):
@@ -265,44 +288,27 @@ class PriceAwareThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Change only the Nord Pool source and market area, in shadow mode."""
+        """Change only the Nord Pool source and market area.
+
+        Allowed in live mode as well: the price source never commands the
+        actuator, and a failing source falls back to the base target.
+        """
         entry = self._get_reconfigure_entry()
-        values = {**entry.data, **entry.options}
-        if not values.get(CONF_SHADOW, True):
-            return self.async_abort(reason="reconfigure_live_not_allowed")
         errors: dict[str, str] = {}
         if user_input is not None:
-            source = self.hass.config_entries.async_get_entry(
-                user_input[CONF_NORDPOOL_ENTRY]
-            )
-            area = str(user_input[CONF_AREA]).strip().upper()
-            if source is None or source.domain != "nordpool":
-                errors["base"] = "invalid_price_source"
-            elif not area or area not in {
-                str(known_area).upper() for known_area in source.data.get("areas", ())
-            }:
-                errors["base"] = "invalid_market_area"
+            if error := _price_source_error(self.hass, user_input):
+                errors["base"] = error
             else:
                 return self.async_update_reload_and_abort(
                     entry,
                     data_updates={
                         CONF_NORDPOOL_ENTRY: user_input[CONF_NORDPOOL_ENTRY],
-                        CONF_AREA: area,
+                        CONF_AREA: _area(user_input),
                     },
                 )
-        current = user_input or entry.data
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=vol.Schema({
-                vol.Required(
-                    CONF_NORDPOOL_ENTRY, default=current.get(CONF_NORDPOOL_ENTRY)
-                ): selector.ConfigEntrySelector(
-                    selector.ConfigEntrySelectorConfig(integration="nordpool")
-                ),
-                vol.Required(
-                    CONF_AREA, default=current.get(CONF_AREA, "")
-                ): selector.TextSelector(),
-            }),
+            data_schema=vol.Schema(_price_source_schema(user_input or dict(entry.data))),
             errors=errors,
         )
 
@@ -327,7 +333,15 @@ class PriceAwareThermostatOptionsFlow(OptionsFlowWithReload):
             needs_ack = not merged[CONF_SHADOW] and not (
                 already_live and merged.get(CONF_HEATER) == values.get(CONF_HEATER)
             )
-            if _invalid_settings(merged):
+            source_changed = (
+                merged.get(CONF_NORDPOOL_ENTRY) != values.get(CONF_NORDPOOL_ENTRY)
+                or (CONF_AREA in merged and _area(merged) != values.get(CONF_AREA))
+            )
+            # Only a changed source is validated: an unchanged, broken source is
+            # already surfaced as a repair and must not block e.g. enabling shadow.
+            if source_changed and (error := _price_source_error(self.hass, merged)):
+                errors["base"] = error
+            elif _invalid_settings(merged):
                 errors["base"] = "invalid_temperature_range"
             elif CONF_HEATER in merged and (error := validate_backend(
                 self.hass, merged, entry_id=self.config_entry.entry_id
@@ -348,6 +362,19 @@ class PriceAwareThermostatOptionsFlow(OptionsFlowWithReload):
                 # Retain persisted settings omitted by the form, including base target.
                 updated = {**self.config_entry.options, **user_input}
                 updated.pop(CONF_SAFETY_ACK, None)
+                # The price source lives in entry data (shared with reconfigure),
+                # never in options, so there is a single source of truth.
+                updated.pop(CONF_NORDPOOL_ENTRY, None)
+                updated.pop(CONF_AREA, None)
+                if source_changed:
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry,
+                        data={
+                            **self.config_entry.data,
+                            CONF_NORDPOOL_ENTRY: merged[CONF_NORDPOOL_ENTRY],
+                            CONF_AREA: _area(merged),
+                        },
+                    )
                 if updated[CONF_SHADOW]:
                     # Back in shadow: the next live switch must ask again.
                     updated.pop(CONF_SAFETY_ACK_AT, None)
@@ -370,10 +397,15 @@ class PriceAwareThermostatOptionsFlow(OptionsFlowWithReload):
                     )
                 return self.async_create_entry(data=updated)
 
-        schema = _settings_schema(
+        # Entries always carry a price source; guard for hand-built minimal entries.
+        schema = (
+            _price_source_schema({**values, **(user_input or {})})
+            if CONF_NORDPOOL_ENTRY in values else {}
+        )
+        schema.update(_settings_schema(
             values, options=True, min_cycle_floor=60 if climate_backend else 0,
             ask_ack=not already_live,
-        ).schema.copy()
+        ).schema)
         if CONF_HEATER in values:
             kind = values.get(CONF_CONTROL_TYPE, CONTROL_SWITCH)
             schema.update({

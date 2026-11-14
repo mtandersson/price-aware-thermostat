@@ -24,7 +24,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PriceAwareConfigEntry) -
     # A service outage must never prevent local temperature regulation.
     await coordinator.async_refresh()
     entry.runtime_data = coordinator
-    await hass.config_entries.async_forward_entry_setups(entry, [Platform.CLIMATE])
+    await hass.config_entries.async_forward_entry_setups(entry, [Platform.CLIMATE, Platform.SENSOR])
     return True
 
 
@@ -32,7 +32,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: PriceAwareConfigEntry) 
     """Unload the climate platform and its event subscriptions."""
     from homeassistant.const import Platform
 
-    return await hass.config_entries.async_unload_platforms(entry, [Platform.CLIMATE])
+    return await hass.config_entries.async_unload_platforms(entry, [Platform.CLIMATE, Platform.SENSOR])
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: PriceAwareConfigEntry) -> bool:

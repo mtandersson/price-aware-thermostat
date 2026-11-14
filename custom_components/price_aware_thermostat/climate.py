@@ -78,6 +78,7 @@ from .control import (
 from .coordinator import NordPoolPriceCoordinator
 from .optimizer import Filter, OptimizationResult, OptimizerConfig, optimize
 from .relay_guard import RelayCommandGuard
+from .sensor import device_info
 
 ACTUATOR_TIMEOUT_SECONDS = 10
 
@@ -152,7 +153,10 @@ class PriceAwareThermostat(RestoreClimate):
             settings.get(CONF_HOT_TOLERANCE, DEFAULTS[CONF_HOT_TOLERANCE])
         )
         self._attr_unique_id = entry.entry_id
-        self._attr_name = entry.title
+        # The thermostat is the device's main entity: it carries the device name
+        # (the entry title), and the price sensor shares the same device.
+        self._attr_name = None
+        self._attr_device_info = device_info(entry)
         self._attr_min_temp = float(settings.get(CONF_MIN_TEMP, DEFAULTS[CONF_MIN_TEMP]))
         self._attr_max_temp = float(settings.get(CONF_MAX_TEMP, DEFAULTS[CONF_MAX_TEMP]))
         self._attr_native_target_temperature = float(
