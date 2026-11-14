@@ -1,5 +1,6 @@
-"""Prevent event storms from creating unbounded climate evaluation tasks."""
+"""Prevent concurrent climate evaluations from producing unbounded tasks."""
 
+import asyncio
 from unittest.mock import patch
 
 from homeassistant.core import HomeAssistant
@@ -19,10 +20,10 @@ from custom_components.price_aware_thermostat.const import (
 )
 
 
-async def test_sensor_event_burst_coalesces_into_single_worker(
+async def test_sensor_event_storm_coalesces_during_inflight_evaluation(
     hass: HomeAssistant,
 ) -> None:
-    """A rapid burst must not allocate one evaluation task per event."""
+    """A burst during in-flight work requires only one follow-up calculation."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="Coalesced thermostat",
@@ -44,35 +45,58 @@ async def test_sensor_event_burst_coalesces_into_single_worker(
     )
     hass.states.async_set("switch.coalesced_heater", "off")
 
-    with (
-        patch(
-            "custom_components.price_aware_thermostat.coordinator."
-            "NordPoolPriceCoordinator._async_update_data",
-            return_value=(),
-        ),
-        patch.object(PriceAwareThermostat, "_async_evaluate", autospec=True) as evaluate,
+    with patch(
+        "custom_components.price_aware_thermostat.coordinator."
+        "NordPoolPriceCoordinator._async_update_data",
+        return_value=(),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
-        evaluate.reset_mock()
 
-        for index in range(100):
+        first_started = asyncio.Event()
+        release_first = asyncio.Event()
+
+        async def blocked_evaluation(entity: PriceAwareThermostat) -> None:
+            first_started.set()
+            await release_first.wait()
+
+        with patch.object(
+            PriceAwareThermostat, "_async_evaluate", autospec=True,
+            side_effect=blocked_evaluation,
+        ) as evaluate:
             hass.states.async_set(
-                "sensor.coalesced_temperature",
-                str(4.0 + index * 0.01),
+                "sensor.coalesced_temperature", "4.0",
                 {"unit_of_measurement": "°C"},
             )
-        await hass.async_block_till_done()
-        assert 1 <= evaluate.await_count <= 2
+            for _ in range(50):
+                if first_started.is_set():
+                    break
+                await asyncio.sleep(0)
+            assert first_started.is_set()
+            assert evaluate.await_count == 1
 
-        entity = evaluate.await_args_list[-1].args[0]
-        assert entity._evaluation_requested is False
-        assert entity._evaluation_task is not None
-        assert entity._evaluation_task.done()
+            for index in range(100):
+                hass.states.async_set(
+                    "sensor.coalesced_temperature",
+                    str(4.0 + index * 0.01),
+                    {"unit_of_measurement": "°C"},
+                )
+            for _ in range(20):
+                await asyncio.sleep(0)
+            assert evaluate.await_count == 1
 
-        assert await hass.config_entries.async_unload(entry.entry_id)
-        assert entity._unloading is True
-        calls_before = evaluate.await_count
-        entity._queue_evaluation()
-        await hass.async_block_till_done()
-        assert evaluate.await_count == calls_before
+            release_first.set()
+            await hass.async_block_till_done()
+            assert evaluate.await_count == 2
+
+            entity = evaluate.await_args_list[-1].args[0]
+            assert entity._evaluation_requested is False
+            assert entity._evaluation_task is not None
+            assert entity._evaluation_task.done()
+
+            assert await hass.config_entries.async_unload(entry.entry_id)
+            assert entity._unloading is True
+            calls_before = evaluate.await_count
+            entity._queue_evaluation()
+            await hass.async_block_till_done()
+            assert evaluate.await_count == calls_before
