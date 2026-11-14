@@ -48,7 +48,7 @@ async def test_shadow_mode_never_writes_to_switch(hass: HomeAssistant) -> None:
         options={CONF_SHADOW: True},
     )
     entry.add_to_hass(hass)
-    hass.states.async_set("sensor.storage_temp", "4.0")
+    hass.states.async_set("sensor.storage_temp", "4.0", {"unit_of_measurement": "°C"})
     hass.states.async_set("switch.storage_heat", "off")
     on = async_mock_service(hass, "switch", "turn_on")
     off = async_mock_service(hass, "switch", "turn_off")
@@ -66,7 +66,7 @@ async def test_shadow_mode_never_writes_to_switch(hass: HomeAssistant) -> None:
         assert state.attributes["planned_heating"] is True
         assert on == []
         assert off == []
-        hass.states.async_set("sensor.storage_temp", "3.0")
+        hass.states.async_set("sensor.storage_temp", "3.0", {"unit_of_measurement": "°C"})
         await hass.async_block_till_done()
         assert on == []
         assert off == []

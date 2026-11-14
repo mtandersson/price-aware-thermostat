@@ -45,3 +45,28 @@ def is_temperature_sample_fresh(
         raise ValueError("Maximum sensor age must be positive")
     age = now - last_reported
     return timedelta(0) <= age <= max_age
+
+
+def parse_temperature_celsius(raw: str, unit: str | None) -> float | None:
+    """Validate and normalize a measured temperature to Celsius.
+
+    The climate entity advertises Celsius as its native temperature unit.
+    Never interpret a Fahrenheit or Kelvin reading as Celsius, and do not
+    guess the units of an unlabelled reading. This is deliberately independent
+    of Home Assistant imports so the safety rule is easily unit tested.
+    """
+    try:
+        value = float(raw)
+    except (ValueError, TypeError, OverflowError):
+        return None
+    if not isfinite(value):
+        return None
+    if unit == "°C":
+        normalized = value
+    elif unit == "°F":
+        normalized = (value - 32.0) * (5.0 / 9.0)
+    elif unit == "K":
+        normalized = value - 273.15
+    else:
+        return None
+    return normalized if isfinite(normalized) else None

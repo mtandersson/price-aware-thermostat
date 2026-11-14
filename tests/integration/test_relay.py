@@ -46,7 +46,7 @@ def make_entry(hass: HomeAssistant, *, shadow: bool) -> MockConfigEntry:
 async def test_live_control_turns_on_only_for_valid_cold_sensor(hass: HomeAssistant) -> None:
     """Cold valid sensor may switch on in the mock HA test environment."""
     entry = make_entry(hass, shadow=False)
-    hass.states.async_set("sensor.safety_temperature", "4.0")
+    hass.states.async_set("sensor.safety_temperature", "4.0", {"unit_of_measurement": "°C"})
     hass.states.async_set("switch.safety_heater", "off")
     assert await async_setup_component(hass, "switch", {})
     on: list[ServiceCall] = []
