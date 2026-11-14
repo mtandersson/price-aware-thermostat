@@ -20,6 +20,7 @@ from custom_components.price_aware_thermostat.const import (
     CONF_CONTROL_TYPE,
     CONF_HEATER,
     CONF_HVAC_MODES,
+    CONF_MAX_DEVIATION,
     CONF_MAX_TEMP,
     CONF_MIN_TEMP,
     CONF_NAME,
@@ -60,13 +61,55 @@ async def test_legacy_migration_retains_all_user_choices(hass: HomeAssistant) ->
     entry.add_to_hass(hass)
     old_options = dict(entry.options)
     assert await async_migrate_entry(hass, entry)
-    assert entry.version == 2
+    assert (entry.version, entry.minor_version) == (2, 2)
     assert entry.data[CONF_CONTROL_TYPE] == CONTROL_SWITCH
     assert entry.unique_id == "switch.storage"
-    assert dict(entry.options) == old_options
+    # User choices are untouched; the old implicit limits are pinned so the
+    # wider new defaults never apply to an existing entry.
+    expected = {
+        **old_options, CONF_MAX_DEVIATION: 0.8, CONF_MIN_TEMP: 5.3, CONF_MAX_TEMP: 7.5,
+    }
+    assert dict(entry.options) == expected
     assert backend_from_settings({**entry.data, **entry.options}).supports_live_control
     assert await async_migrate_entry(hass, entry)
-    assert dict(entry.options) == old_options
+    assert dict(entry.options) == expected
+
+
+@pytest.mark.parametrize(
+    ("data", "options", "expected"),
+    [
+        # Missing everywhere: default deviation, explicit limits retained.
+        ({CONF_MIN_TEMP: 18, CONF_MAX_TEMP: 26}, {}, 0.8),
+        # Explicitly empty (cleared in the old options flow): default.
+        ({CONF_MIN_TEMP: 18, CONF_MAX_TEMP: 26, CONF_MAX_DEVIATION: 1.5},
+         {CONF_MAX_DEVIATION: None}, 0.8),
+        # A chosen value is kept, whether in data or options.
+        ({CONF_MIN_TEMP: 18, CONF_MAX_TEMP: 26, CONF_MAX_DEVIATION: 1.5}, {}, 1.5),
+        ({CONF_MIN_TEMP: 18, CONF_MAX_TEMP: 26}, {CONF_MAX_DEVIATION: 0.0}, 0.0),
+    ],
+)
+async def test_minor_migration_sets_deviation_and_keeps_limits(
+    hass: HomeAssistant, data: dict[str, object], options: dict[str, object], expected: float
+) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN, version=2, minor_version=1,
+        data={CONF_CONTROL_TYPE: CONTROL_CLIMATE, **data}, options=options,
+    )
+    entry.add_to_hass(hass)
+    assert await async_migrate_entry(hass, entry)
+    merged = {**entry.data, **entry.options}
+    assert entry.minor_version == 2
+    assert merged[CONF_MAX_DEVIATION] == expected
+    assert (merged[CONF_MIN_TEMP], merged[CONF_MAX_TEMP]) == (18, 26)
+
+
+async def test_current_entries_are_not_migrated_again(hass: HomeAssistant) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN, version=2, minor_version=2, data={}, options={CONF_SHADOW: True},
+    )
+    entry.add_to_hass(hass)
+    assert await async_migrate_entry(hass, entry)
+    assert dict(entry.options) == {CONF_SHADOW: True}
 
 
 async def test_future_migration_is_rejected(hass: HomeAssistant) -> None:
@@ -240,7 +283,7 @@ async def test_ac_only_settings_are_validated(
     assert validate_backend(hass, {**settings(), **changes}) == error
 
 
-async def test_optional_ac_settings_can_be_cleared_in_options(hass: HomeAssistant) -> None:
+async def test_window_contacts_clear_and_deviation_is_kept_in_options(hass: HomeAssistant) -> None:
     entities(hass)
     entry = MockConfigEntry(
         domain=DOMAIN, version=2,
@@ -251,10 +294,11 @@ async def test_optional_ac_settings_can_be_cleared_in_options(hass: HomeAssistan
     entry.add_to_hass(hass)
     flow = await hass.config_entries.options.async_init(entry.entry_id)
     result = await hass.config_entries.options.async_configure(
-        flow["flow_id"], live_options(**{CONF_SHADOW: True})
+        flow["flow_id"], live_options(**{CONF_SHADOW: True, CONF_MAX_DEVIATION: 1.2})
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
-    assert result["data"]["maximum_price_deviation"] is None
+    # The deviation is a required field (prefilled from the entry), never cleared.
+    assert result["data"]["maximum_price_deviation"] == 1.2
     assert result["data"]["window_contacts"] == []
 
 
@@ -386,8 +430,9 @@ async def test_switch_entries_do_not_store_heat_pump_settings(hass: HomeAssistan
     data.pop(CONF_SHADOW)
     result = await hass.config_entries.flow.async_configure(flow["flow_id"], data)
     assert result["type"] == FlowResultType.CREATE_ENTRY
-    for key in ("heat_compensation", "window_contacts", "maximum_price_deviation",
-                CONF_HVAC_MODES):
+    # The price deviation applies to every control type and is kept.
+    assert result["data"]["maximum_price_deviation"] == 0.5
+    for key in ("heat_compensation", "window_contacts", CONF_HVAC_MODES):
         assert key not in result["data"]
 
 

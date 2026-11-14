@@ -37,10 +37,17 @@ CONF_WINDOW_OPEN_DELAY: Final = "window_open_delay_seconds"
 CONF_WINDOW_CLOSE_DELAY: Final = "window_close_delay_seconds"
 CONF_MAX_DEVIATION: Final = "maximum_price_deviation"
 
+# Limits and deviation that applied before config entry minor version 2.
+# Migration pins these on entries that relied on the old defaults, so an
+# upgrade never widens an existing entry's limits.
+LEGACY_MIN_TEMP: Final = 5.3
+LEGACY_MAX_TEMP: Final = 7.5
+
 DEFAULTS: Final[dict[str, float | int | str | bool]] = {
     CONF_BASE_TEMP: 6.0,
-    CONF_MIN_TEMP: 5.3,
-    CONF_MAX_TEMP: 7.5,
+    CONF_MIN_TEMP: 5.0,
+    CONF_MAX_TEMP: 25.0,
+    CONF_MAX_DEVIATION: 0.8,
     CONF_LOOKAHEAD: 180,
     CONF_FILTER: "triangle",
     CONF_DEADBAND: 0.20,

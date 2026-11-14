@@ -35,6 +35,7 @@ class HeatCoolTests(unittest.TestCase):
             deadband_sek_per_kwh=0.1,
             sensitivity_c_per_sek_per_kwh=0.5,
             hvac_mode="heat",
+            max_deviation_c=None,  # absolute limits only, unless a test sets one
         )
         self.cool = replace(self.heat, hvac_mode="cool")
         self.now = T0 + timedelta(minutes=1)
@@ -163,7 +164,9 @@ class HeatCoolTests(unittest.TestCase):
             lookahead_minutes=60, deadband_sek_per_kwh=0.1, sensitivity_c_per_sek_per_kwh=0.5,
         )
         self.assertEqual("heat", legacy.hvac_mode)
-        self.assertIsNone(legacy.max_deviation_c)
+        self.assertEqual(0.8, legacy.max_deviation_c)
+        self.assertEqual((5.0, 25.0), (
+            OptimizerConfig().minimum_temperature, OptimizerConfig().maximum_temperature))
         prices = intervals([0.2, 1.2, 1.2, 1.2, 1.2])
         # Unclamped result identical to an explicitly heating configuration.
         self.assertEqual(optimize(self.now, prices, legacy), optimize(self.now, prices, self.heat))

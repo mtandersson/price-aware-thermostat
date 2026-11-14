@@ -207,9 +207,13 @@ class PriceAwareThermostat(RestoreClimate):
         """Price-adjustment direction; the switch controller only heats."""
         return "heat"
 
-    def _max_deviation(self) -> float | None:
-        """Optional deviation limit around the base target (none for the switch type)."""
-        return None
+    def _max_deviation(self) -> float:
+        """Price-adjustment limit around the user's base target, for every control type.
+
+        An entry without a value (only possible before migration) uses the default.
+        """
+        value = {**self._entry.data, **self._entry.options}.get(CONF_MAX_DEVIATION)
+        return float(DEFAULTS[CONF_MAX_DEVIATION] if value is None else value)
 
     def _safe_calculate(self) -> OptimizationResult:
         """Calculate the price-adjusted target, falling back to the base target."""
@@ -526,10 +530,6 @@ class ClimateBackendThermostat(PriceAwareThermostat):
     # -- hooks used by the shared optimizer code -------------------------------
     def _optimizer_mode(self) -> Literal["heat", "cool"]:
         return "cool" if self._attr_hvac_mode == HVACMode.COOL else "heat"
-
-    def _max_deviation(self) -> float | None:
-        value = {**self._entry.data, **self._entry.options}.get(CONF_MAX_DEVIATION)
-        return None if value is None else float(value)
 
     def _tracked_entities(self) -> list[str]:
         return [self._sensor, self._heater, *self._windows]

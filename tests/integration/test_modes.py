@@ -170,7 +170,8 @@ async def test_adjustment_diagnostics_follow_the_active_mode(hass: HomeAssistant
         state = hass.states.get(entity_id)
         assert state is not None
         assert state.attributes["optimization_reason"] == "preheat"
-        assert state.attributes["effective_target_c"] == 9.0
+        # Relative to the base target: 6.0 + default 0.8 deviation, below the 9.0 limit.
+        assert state.attributes["effective_target_c"] == 6.8
         assert state.attributes["adjustment_clamped"] is True
         assert state.attributes["requested_adjustment_c"] > 3.0
 

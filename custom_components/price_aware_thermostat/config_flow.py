@@ -61,6 +61,12 @@ def _number(minimum: float, maximum: float, step: float = 0.1) -> selector.Numbe
     )
 
 
+def _deviation_default(initial: dict[str, Any]) -> float:
+    """Prefill the deviation, treating a missing or empty value as the default."""
+    value = initial.get(CONF_MAX_DEVIATION)
+    return float(DEFAULTS[CONF_MAX_DEVIATION] if value is None else value)
+
+
 def _settings_schema(
     initial: dict[str, Any], *, options: bool, min_cycle_floor: float = 0,
     ask_ack: bool = True,
@@ -76,6 +82,12 @@ def _settings_schema(
         vol.Required(
             CONF_MAX_TEMP, default=initial.get(CONF_MAX_TEMP, DEFAULTS[CONF_MAX_TEMP])
         ): _number(-20, 40),
+        # Required with a default: price adjustment is always relative to the
+        # user's target. 0 disables price adjustment; it cannot be left empty.
+        vol.Required(
+            CONF_MAX_DEVIATION,
+            default=_deviation_default(initial),
+        ): _number(0, 20, 0.1),
         vol.Required(
             CONF_LOOKAHEAD, default=initial.get(CONF_LOOKAHEAD, DEFAULTS[CONF_LOOKAHEAD])
         ): _number(15, 1440, 15),
@@ -120,7 +132,6 @@ def _settings_schema(
 _AC_KEYS = (
     CONF_HEAT_COMPENSATION,
     CONF_COOL_COMPENSATION,
-    CONF_MAX_DEVIATION,
     CONF_WINDOW_SENSORS,
     CONF_WINDOW_OPEN_DELAY,
     CONF_WINDOW_CLOSE_DELAY,
@@ -132,10 +143,6 @@ def _ac_schema(initial: dict[str, Any]) -> dict[vol.Marker, Any]:
     """Settings that only apply to the heat-pump/AC control type."""
     # Optional, clearable fields use a suggested value (UI prefill) rather than a
     # default: a default would silently refill a field the user emptied.
-    deviation: vol.Marker = vol.Optional(
-        CONF_MAX_DEVIATION,
-        description={"suggested_value": initial.get(CONF_MAX_DEVIATION)},
-    )
     windows: vol.Marker = vol.Optional(
         CONF_WINDOW_SENSORS,
         description={"suggested_value": initial.get(CONF_WINDOW_SENSORS) or None},
@@ -149,7 +156,6 @@ def _ac_schema(initial: dict[str, Any]) -> dict[vol.Marker, Any]:
             CONF_COOL_COMPENSATION,
             default=initial.get(CONF_COOL_COMPENSATION, DEFAULTS[CONF_COOL_COMPENSATION]),
         ): _number(-10, 10, 0.5),
-        deviation: _number(0, 20, 0.1),
         windows: selector.EntitySelector(
             selector.EntitySelectorConfig(domain="binary_sensor", multiple=True)
         ),
@@ -170,7 +176,11 @@ def _invalid_settings(settings: dict[str, Any]) -> bool:
         minimum = float(settings[CONF_MIN_TEMP])
         base = float(settings[CONF_BASE_TEMP])
         maximum = float(settings[CONF_MAX_TEMP])
-        return not minimum <= base <= maximum
+        raw = settings.get(CONF_MAX_DEVIATION, DEFAULTS[CONF_MAX_DEVIATION])
+        if raw is None or isinstance(raw, bool):
+            return True
+        deviation = float(raw)
+        return not (minimum <= base <= maximum and 0 <= deviation <= 20)
     except (KeyError, ValueError, TypeError):
         return True
 
@@ -179,6 +189,8 @@ class PriceAwareThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
     """Configure an isolated price-aware thermostat."""
 
     VERSION = 2
+    # Minor 2: maximum_price_deviation is always set (default 0.8 °C).
+    MINOR_VERSION = 2
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -348,8 +360,6 @@ class PriceAwareThermostatOptionsFlow(OptionsFlowWithReload):
                 if climate_backend:
                     # An omitted optional field means "cleared"; write it explicitly so
                     # a value saved at setup (in entry data) cannot silently persist.
-                    if CONF_MAX_DEVIATION not in user_input:
-                        updated[CONF_MAX_DEVIATION] = None
                     if CONF_WINDOW_SENSORS not in user_input:
                         updated[CONF_WINDOW_SENSORS] = []
                 if updated.get(CONF_HEATER, values.get(CONF_HEATER)) != values.get(CONF_HEATER):
