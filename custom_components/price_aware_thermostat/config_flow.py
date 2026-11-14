@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import voluptuous as vol
+import probatio as vol
 
 from homeassistant.config_entries import (
     ConfigEntry,
@@ -118,7 +118,7 @@ class PriceAwareThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
         """Set up a temperature sensor, heater switch, and Nord Pool source."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            source = self.hass.config_entries.async_get(
+            source = self.hass.config_entries.async_get_entry(
                 user_input[CONF_NORDPOOL_ENTRY]
             )
             if source is None or source.domain != "nordpool":
