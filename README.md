@@ -11,6 +11,7 @@ An experimental Home Assistant custom integration for on/off electric heaters th
 - Support for 15-minute, hourly and mixed price intervals.
 - Official Home Assistant Nord Pool action `nordpool.get_prices_for_date`, using SEK/MWh converted to SEK/kWh.
 - Bounded temperatures, price deadband, heating hysteresis and a minimum relay cycle duration.
+- Configurable maximum age for temperature sensor reports (default: 60 minutes). Stale or unavailable readings disable automatic heat demand; independent hardware frost protection remains essential.
 - Price-aware or fixed-temperature presets and explicit heat/off modes.
 - UI-based setup and options flow, English UI strings, and diagnostics in climate attributes.
 - A default **read-only shadow mode** for side-by-side evaluation before commissioning.
