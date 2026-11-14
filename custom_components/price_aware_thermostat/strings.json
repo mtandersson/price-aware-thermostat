@@ -12,7 +12,7 @@
       },
       "user": {
         "title": "Add a price-aware thermostat",
-        "description": "Choose a control type and an external temperature sensor. Switch control starts in shadow mode. The AC/climate type is a configuration preview only; live control is not implemented yet.",
+        "description": "Choose a control type and an external temperature sensor. New entries start in shadow mode, which calculates decisions without sending any commands. The heat pump/AC type commands an existing climate entity from the room sensor once live control is confirmed.",
         "data": {
           "name": "Name",
           "temperature_sensor": "Temperature sensor",
@@ -26,12 +26,18 @@
           "filter_type": "Price filter",
           "deadband_sek_per_kwh": "Price deadband (SEK/kWh)",
           "sensitivity_c_per_sek_per_kwh": "Sensitivity (\u00b0C per SEK/kWh)",
-          "cold_tolerance": "Heat-on tolerance (\u00b0C)",
-          "hot_tolerance": "Heat-off tolerance (\u00b0C)",
-          "min_cycle_seconds": "Minimum relay cycle time (seconds)",
+          "cold_tolerance": "Cold-side tolerance (\u00b0C): heating starts / cooling stops",
+          "hot_tolerance": "Warm-side tolerance (\u00b0C): heating stops / cooling starts",
+          "min_cycle_seconds": "Minimum relay cycle / pump restart pause (seconds)",
           "max_sensor_age_minutes": "Maximum temperature sample age (minutes)",
           "control_type": "Control type",
-          "controlled_hvac_modes": "Backend modes to configure (AC preview)"
+          "controlled_hvac_modes": "Heat/cool modes to control (heat pump/AC)",
+          "heat_compensation": "Heating compensation for the pump setpoint (\u00b0C)",
+          "cool_compensation": "Cooling compensation for the pump setpoint (\u00b0C)",
+          "maximum_price_deviation": "Maximum price adjustment around the base target (\u00b0C, empty = limited only by min/max)",
+          "window_contacts": "Window/door contacts (optional)",
+          "window_open_delay_seconds": "Open longer than this pauses operation (seconds)",
+          "window_close_delay_seconds": "Closed at least this long before resuming (seconds)"
         }
       }
     },
@@ -47,7 +53,8 @@
       "already_configured": "This actuator already has a Price-Aware Thermostat instance.",
       "invalid_hvac_modes": "Select heat/cool modes supported by the backend, which must also support off.",
       "invalid_backend_limits": "The climate must support a target temperature and report finite, ordered temperature limits and a positive target step.",
-      "climate_live_not_supported": "AC/climate control is a shadow-only configuration preview. Live control is not implemented yet."
+      "invalid_ac_settings": "Compensation must be within \u00b110 \u00b0C, the restart pause 60\u20133600 seconds, window delays 0\u20133600 seconds and the price deviation 0\u201320 \u00b0C.",
+      "invalid_window_sensor": "Window/door contacts must be binary sensors."
     },
     "abort": {
       "already_configured": "This actuator already has a Price-Aware Thermostat instance.",
@@ -59,7 +66,7 @@
     "step": {
       "init": {
         "title": "Thermostat settings",
-        "description": "Switch control requires explicit safety confirmation. The AC/climate type remains a shadow-only configuration preview.",
+        "description": "Live control requires explicit safety confirmation. Shadow mode calculates and shows proposed decisions without sending commands.",
         "data": {
           "base_temperature": "Base temperature (\u00b0C)",
           "minimum_temperature": "Minimum temperature (\u00b0C)",
@@ -68,21 +75,27 @@
           "filter_type": "Price filter",
           "deadband_sek_per_kwh": "Price deadband (SEK/kWh)",
           "sensitivity_c_per_sek_per_kwh": "Sensitivity (\u00b0C per SEK/kWh)",
-          "cold_tolerance": "Heat-on tolerance (\u00b0C)",
-          "hot_tolerance": "Heat-off tolerance (\u00b0C)",
-          "min_cycle_seconds": "Minimum cycle (seconds)",
-          "shadow_mode": "Shadow mode (no relay control)",
-          "safety_acknowledged": "I verified exclusive heater ownership and independent hardware safeguards",
+          "cold_tolerance": "Cold-side tolerance (\u00b0C): heating starts / cooling stops",
+          "hot_tolerance": "Warm-side tolerance (\u00b0C): heating stops / cooling starts",
+          "min_cycle_seconds": "Minimum cycle / pump restart pause (seconds)",
+          "shadow_mode": "Shadow mode (send no commands)",
+          "safety_acknowledged": "I verified exclusive ownership of the controlled device and independent hardware safeguards",
           "max_sensor_age_minutes": "Maximum temperature sample age (minutes)",
           "temperature_sensor": "External temperature sensor",
           "heater": "Controlled actuator",
-          "controlled_hvac_modes": "Backend modes to configure (AC preview)"
+          "controlled_hvac_modes": "Heat/cool modes to control (heat pump/AC)",
+          "heat_compensation": "Heating compensation for the pump setpoint (\u00b0C)",
+          "cool_compensation": "Cooling compensation for the pump setpoint (\u00b0C)",
+          "maximum_price_deviation": "Maximum price adjustment around the base target (\u00b0C, empty = limited only by min/max)",
+          "window_contacts": "Window/door contacts (optional)",
+          "window_open_delay_seconds": "Open longer than this pauses operation (seconds)",
+          "window_close_delay_seconds": "Closed at least this long before resuming (seconds)"
         }
       }
     },
     "error": {
       "invalid_temperature_range": "Minimum must be no higher than base, and base must be no higher than maximum.",
-      "safety_confirmation_required": "Confirm safe ownership and hardware safeguards before enabling relay control.",
+      "safety_confirmation_required": "Confirm exclusive ownership and independent hardware safeguards before enabling live control.",
       "invalid_backend": "Select a valid actuator matching the control type; switch control supports heating only.",
       "invalid_room_sensor": "Select an available temperature sensor with a numeric reading and supported temperature unit.",
       "invalid_actuator": "Select an available actuator matching the control type.",
@@ -90,15 +103,16 @@
       "already_configured": "This actuator already has a Price-Aware Thermostat instance.",
       "invalid_hvac_modes": "Select heat/cool modes supported by the backend, which must also support off.",
       "invalid_backend_limits": "The climate must support a target temperature and report finite, ordered temperature limits and a positive target step.",
-      "climate_live_not_supported": "AC/climate control is a shadow-only configuration preview. Live control is not implemented yet.",
-      "actuator_handoff_required": "Before changing the actuator, save shadow mode, confirm the previous switch is off, and keep the new actuator in shadow mode."
+      "actuator_handoff_required": "Before changing the actuator, save shadow mode, confirm the previous switch is off, and keep the new actuator in shadow mode.",
+      "invalid_ac_settings": "Compensation must be within \u00b110 \u00b0C, the restart pause 60\u20133600 seconds, window delays 0\u20133600 seconds and the price deviation 0\u201320 \u00b0C.",
+      "invalid_window_sensor": "Window/door contacts must be binary sensors."
     }
   },
   "selector": {
     "control_type": {
       "options": {
         "switch": "Element / heating switch",
-        "climate": "Heat pump / AC climate (preview)"
+        "climate": "Heat pump / AC climate"
       }
     }
   }

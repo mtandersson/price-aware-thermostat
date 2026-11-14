@@ -12,9 +12,16 @@ from homeassistant.helpers import entity_registry as er
 
 from .const import (
     CONF_CONTROL_TYPE,
+    CONF_COOL_COMPENSATION,
+    CONF_HEAT_COMPENSATION,
     CONF_HEATER,
     CONF_HVAC_MODES,
+    CONF_MAX_DEVIATION,
+    CONF_MIN_CYCLE,
     CONF_SENSOR,
+    CONF_WINDOW_CLOSE_DELAY,
+    CONF_WINDOW_OPEN_DELAY,
+    CONF_WINDOW_SENSORS,
     CONTROL_CLIMATE,
     CONTROL_SWITCH,
     DOMAIN,
@@ -26,8 +33,9 @@ from .control import parse_temperature_celsius
 class ControlBackend:
     """Stable actuator identity and implemented command/mode capabilities.
 
-    Climate mode selection records future intent. Only OFF is implemented for
-    its configuration preview; live AC control belongs to issue #23.
+    A switch backend is a heating relay. A climate backend is a heat pump/AC
+    commanded with HVAC-mode and temperature service calls; the controlled
+    modes are the configured heat/cool subset plus off.
     """
 
     kind: str
@@ -36,11 +44,13 @@ class ControlBackend:
 
     @property
     def supports_live_control(self) -> bool:
-        return self.kind == CONTROL_SWITCH
+        return True
 
     @property
     def implemented_modes(self) -> tuple[str, ...]:
-        return ("heat", "off") if self.kind == CONTROL_SWITCH else ("off",)
+        if self.kind == CONTROL_SWITCH:
+            return ("heat", "off")
+        return (*self.configured_modes, "off")
 
 
 def backend_from_settings(settings: dict[str, Any]) -> ControlBackend:
@@ -57,6 +67,40 @@ def backend_from_settings(settings: dict[str, Any]) -> ControlBackend:
     if kind == CONTROL_SWITCH and modes != ["heat"]:
         raise ValueError("Switch backend only supports heating")
     return ControlBackend(kind, entity_id, tuple(dict.fromkeys(modes)))
+
+
+def validate_ac_settings(settings: dict[str, Any]) -> str | None:
+    """Validate heat-pump/AC-only settings independently of UI widgets."""
+
+    def number(key: str, default: float) -> float | None:
+        value = settings.get(key, default)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        return float(value) if isfinite(float(value)) else None
+
+    for key in (CONF_HEAT_COMPENSATION, CONF_COOL_COMPENSATION):
+        value = number(key, 0.0)
+        if value is None or abs(value) > 10:
+            return "invalid_ac_settings"
+    # The restart pause is the compressor's rest period in software: refuse to
+    # configure it away entirely.
+    pause = number(CONF_MIN_CYCLE, 300.0)
+    if pause is None or not 60 <= pause <= 3600:
+        return "invalid_ac_settings"
+    for key in (CONF_WINDOW_OPEN_DELAY, CONF_WINDOW_CLOSE_DELAY):
+        value = number(key, 0.0)
+        if value is None or not 0 <= value <= 3600:
+            return "invalid_ac_settings"
+    if settings.get(CONF_MAX_DEVIATION) is not None:
+        value = number(CONF_MAX_DEVIATION, 0.0)
+        if value is None or not 0 <= value <= 20:
+            return "invalid_ac_settings"
+    contacts = settings.get(CONF_WINDOW_SENSORS, [])
+    if not isinstance(contacts, list) or any(
+        not isinstance(c, str) or not c.startswith("binary_sensor.") for c in contacts
+    ):
+        return "invalid_window_sensor"
+    return None
 
 
 def validate_backend(
@@ -104,4 +148,4 @@ def validate_backend(
             return "invalid_backend_limits"
     except (KeyError, TypeError, ValueError, OverflowError):
         return "invalid_backend_limits"
-    return None
+    return validate_ac_settings(settings)

@@ -28,6 +28,14 @@ CONF_MAX_SENSOR_AGE: Final = "max_sensor_age_minutes"
 CONF_SHADOW: Final = "shadow_mode"
 CONF_SAFETY_ACK: Final = "safety_acknowledged"
 
+# Heat-pump/AC (climate backend) settings.
+CONF_HEAT_COMPENSATION: Final = "heat_compensation"
+CONF_COOL_COMPENSATION: Final = "cool_compensation"
+CONF_WINDOW_SENSORS: Final = "window_contacts"
+CONF_WINDOW_OPEN_DELAY: Final = "window_open_delay_seconds"
+CONF_WINDOW_CLOSE_DELAY: Final = "window_close_delay_seconds"
+CONF_MAX_DEVIATION: Final = "maximum_price_deviation"
+
 DEFAULTS: Final[dict[str, float | int | str | bool]] = {
     CONF_BASE_TEMP: 6.0,
     CONF_MIN_TEMP: 5.3,
@@ -41,4 +49,8 @@ DEFAULTS: Final[dict[str, float | int | str | bool]] = {
     CONF_MIN_CYCLE: 300,
     CONF_MAX_SENSOR_AGE: 60,
     CONF_SHADOW: True,
+    CONF_HEAT_COMPENSATION: 0.0,
+    CONF_COOL_COMPENSATION: 0.0,
+    CONF_WINDOW_OPEN_DELAY: 120,
+    CONF_WINDOW_CLOSE_DELAY: 60,
 }
