@@ -44,6 +44,8 @@ class RunResult:
     adjusted_share: float  # share of time the effective target differed from base
     unavailable_share: float  # share of time optimizer had no usable forecast
     optimizer_calls: int
+    steps: int = 0  # number of simulated time steps
+    heater_on_steps: int = 0
 
 
 def _targets(
@@ -90,7 +92,7 @@ def simulate(
     on = False
     cost = energy = runtime = 0.0
     peak = low = temp
-    steps = adjusted = unavailable = 0
+    steps = adjusted = unavailable = on_steps = 0
     now = sim_start
     while now < sim_end:
         target = cfg.base_temperature
@@ -112,15 +114,19 @@ def simulate(
         energy += kwh
         cost += kwh * price
         runtime += dt_h if on else 0.0
+        on_steps += on
         outdoor = outdoor_temperature_c(now, scenario.outdoor_mean_c, seed)
         heat_kw = params.heater_kw if on else 0.0
-        temp += (heat_kw - params.loss_kw_per_k * (temp - outdoor)) * dt_h / params.capacity_kwh_per_k
+        temp += (
+            (heat_kw - params.loss_kw_per_k * (temp - outdoor)) * dt_h / params.capacity_kwh_per_k
+        )
         peak, low = max(peak, temp), min(low, temp)
         steps += 1
         now += dt
     return RunResult(
-        cost, energy, peak, low, temp, runtime, adjusted / steps, unavailable / steps, calls
-    )
+        cost, energy, peak, low, temp, runtime, adjusted / steps, unavailable / steps, calls,
+        steps, on_steps,
+    )  # fmt: skip
 
 
 BASE = OptimizerConfig(base_temperature=6.0, minimum_temperature=5.3, maximum_temperature=7.5)
@@ -130,9 +136,11 @@ SENSITIVITIES = (1.0, 3.0)
 BASELINE = "fixed 6.0"
 
 
-def run_all(seed: int = 42) -> list[tuple[str, str, RunResult]]:
+def run_all(
+    seed: int = 42, scenarios: list[Scenario] | None = None
+) -> list[tuple[str, str, RunResult]]:
     rows: list[tuple[str, str, RunResult]] = []
-    for sc in build_scenarios(seed):
+    for sc in scenarios if scenarios is not None else build_scenarios(seed):
         rows.append((sc.name, BASELINE, simulate(sc, BASE, False, seed=seed)))
         for f in FILTERS:
             for la in LOOKAHEADS:
@@ -146,6 +154,39 @@ def run_all(seed: int = 42) -> list[tuple[str, str, RunResult]]:
                     label = f"{f} {la}min s={sens:g}"
                     rows.append((sc.name, label, simulate(sc, cfg, True, seed=seed)))
     return rows
+
+
+def sweep(seed: int = 42) -> str:
+    """Opt-in parameter sweep on the `hourly` scenario: triangle 180 min, s=3."""
+    sc = next(s for s in build_scenarios(seed) if s.name == "hourly")
+    cfg = replace(
+        BASE, filter_type="triangle", lookahead_minutes=180, sensitivity_c_per_sek_per_kwh=3.0
+    )
+    halved = [
+        replace(p, price_sek_per_kwh=round(p.price_sek_per_kwh / 2, 4)) for p in sc.true_prices
+    ]
+    # Halving every price also halves the spread; the optimizer deadband and
+    # sensitivity are left unchanged, so it reacts less.
+    half_sc = replace(sc, true_prices=halved, visible_prices=halved)
+    cases = [
+        (f"capacity {c:g} kWh/K", sc, ModelParams(capacity_kwh_per_k=c)) for c in (0.3, 1.5, 5.0)
+    ]
+    cases.append(("prices halved (spread halved)", half_sc, ModelParams()))
+    out = [
+        "## Parameter sweep (`hourly`, triangle 180min s=3)",
+        "",
+        "| case | fixed cost SEK | optimized cost SEK | vs fixed | min C | peak C |",
+        "|---|---:|---:|---:|---:|---:|",
+    ]
+    for label, scenario, params in cases:
+        fixed = simulate(scenario, BASE, False, params, seed)
+        opt = simulate(scenario, cfg, True, params, seed)
+        change = (opt.cost_sek / fixed.cost_sek - 1) * 100
+        out.append(
+            f"| {label} | {fixed.cost_sek:.2f} | {opt.cost_sek:.2f} | {change:+.1f}% "
+            f"| {opt.min_c:.2f} | {opt.peak_c:.2f} |"
+        )
+    return "\n".join(out) + "\n"
 
 
 def render(rows: list[tuple[str, str, RunResult]], seed: int) -> str:
@@ -190,9 +231,12 @@ def render(rows: list[tuple[str, str, RunResult]], seed: int) -> str:
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--sweep", action="store_true", help="append a parameter sweep")
     ap.add_argument("--out", help="also write the markdown table to this file")
     args = ap.parse_args(argv)
     text = render(run_all(args.seed), args.seed)
+    if args.sweep:
+        text += "\n" + sweep(args.seed)
     print(text)
     if args.out:
         with open(args.out, "w", encoding="utf-8") as fh:

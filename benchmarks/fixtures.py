@@ -33,7 +33,9 @@ def local_midnight_utc(day: date, tz: ZoneInfo = STOCKHOLM) -> datetime:
 
 def utc_range(start_day: date, days: int, tz: ZoneInfo = STOCKHOLM) -> tuple[datetime, datetime]:
     """Real UTC span covering `days` local calendar days (23/25 h days at DST)."""
-    return local_midnight_utc(start_day, tz), local_midnight_utc(start_day + timedelta(days=days), tz)
+    return local_midnight_utc(start_day, tz), local_midnight_utc(
+        start_day + timedelta(days=days), tz
+    )
 
 
 def hourly_prices(
@@ -130,7 +132,9 @@ def build_scenarios(seed: int = 42) -> list[Scenario]:
         Scenario("quarter", "same prices as `hourly`, 15-min resolution", winter, winter_q, -3.0),
         Scenario("dst_fall", "5 days across 2026-10-25 (25 h local day)", fall, fall, 3.0),
         Scenario("dst_spring", "5 days across 2026-03-29 (23 h local day)", spring, spring, 1.0),
-        Scenario("negative", "7 days, negative midday prices on alternate days", negative, negative, -3.0),
+        Scenario(
+            "negative", "7 days, negative midday prices on alternate days", negative, negative, -3.0
+        ),
         Scenario("flat", "negative control: near-constant price (0.80 +- 0.03)", flat, flat, -3.0),
         Scenario(
             "gap",

@@ -12,6 +12,7 @@ an existing climate backend, but is currently a **shadow-only configuration
 preview**, exposing off mode and an editable base target without actuator
 commands. AC optimization and live control are tracked in #21 and #23.
 See [control types and backend contract](docs/control-types.md).
+A synthetic, simulation-only [optimizer benchmark](docs/benchmark.md) is also available; it does not measure real savings.
 
 ## Features
 
