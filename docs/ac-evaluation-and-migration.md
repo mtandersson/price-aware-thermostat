@@ -237,7 +237,11 @@ revert it. Retargeting the wrapper later keeps its own entity and unique ID stab
    (`heat` or `cool`) **before** enabling live control. With the wrapper off, live
    control turns the pump off.
 4. In the options, turn shadow mode off and confirm exclusive ownership and
-   independent hardware safeguards.
+   independent hardware safeguards. The confirmation is stored with a timestamp
+   (`safety_acknowledged`, `safety_acknowledged_at`) and is not asked again on
+   later saves while the entry stays live. Turning shadow mode back on clears it,
+   so the next switch to live asks again. The actuator cannot be changed while
+   live; retargeting requires shadow mode and a new confirmation.
 5. Confirm the outcome: the backend mode and target match `proposed_*`,
    `backend_in_sync` is true, and no other automation is changing the backend.
    Keep watching for several days.

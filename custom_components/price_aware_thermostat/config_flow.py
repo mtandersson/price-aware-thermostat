@@ -13,6 +13,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.core import callback
 from homeassistant.helpers import selector
+from homeassistant.util import dt as dt_util
 
 from .backends import validate_backend
 from .const import (
@@ -36,6 +37,7 @@ from .const import (
     CONF_NAME,
     CONF_NORDPOOL_ENTRY,
     CONF_SAFETY_ACK,
+    CONF_SAFETY_ACK_AT,
     CONF_SENSITIVITY,
     CONF_SENSOR,
     CONF_SHADOW,
@@ -60,7 +62,8 @@ def _number(minimum: float, maximum: float, step: float = 0.1) -> selector.Numbe
 
 
 def _settings_schema(
-    initial: dict[str, Any], *, options: bool, min_cycle_floor: float = 0
+    initial: dict[str, Any], *, options: bool, min_cycle_floor: float = 0,
+    ask_ack: bool = True,
 ) -> vol.Schema:
     """Build the shared optimizer/thermostat settings."""
     config: dict[vol.Marker, Any] = {
@@ -107,9 +110,10 @@ def _settings_schema(
         config[vol.Required(CONF_SHADOW, default=initial.get(CONF_SHADOW, True))] = (
             selector.BooleanSelector()
         )
-        config[vol.Optional(CONF_SAFETY_ACK, default=False)] = (
-            selector.BooleanSelector()
-        )
+        if ask_ack:
+            config[vol.Optional(CONF_SAFETY_ACK, default=False)] = (
+                selector.BooleanSelector()
+            )
     return vol.Schema(config)
 
 
@@ -301,12 +305,18 @@ class PriceAwareThermostatOptionsFlow(OptionsFlowWithReload):
         errors: dict[str, str] = {}
         values = {**self.config_entry.data, **self.config_entry.options}
         climate_backend = values.get(CONF_CONTROL_TYPE) == CONTROL_CLIMATE
+        already_live = not values.get(CONF_SHADOW, True)
         if user_input is not None:
             merged = {**values, **user_input}
+            # The acknowledgement covers one live actuator. It is asked on the
+            # shadow -> live transition and again if the actuator changes;
+            # an entry already live (including one saved before it was
+            # persisted, when every live save forced the tick) is acknowledged.
+            needs_ack = not merged[CONF_SHADOW] and not (
+                already_live and merged.get(CONF_HEATER) == values.get(CONF_HEATER)
+            )
             if _invalid_settings(merged):
                 errors["base"] = "invalid_temperature_range"
-            elif not merged[CONF_SHADOW] and not user_input.get(CONF_SAFETY_ACK):
-                errors["base"] = "safety_confirmation_required"
             elif CONF_HEATER in merged and (error := validate_backend(
                 self.hass, merged, entry_id=self.config_entry.entry_id
             )):
@@ -320,10 +330,21 @@ class PriceAwareThermostatOptionsFlow(OptionsFlowWithReload):
                 ))
             ):
                 errors["base"] = "actuator_handoff_required"
+            elif needs_ack and not user_input.get(CONF_SAFETY_ACK):
+                errors["base"] = "safety_confirmation_required"
             else:
                 # Retain persisted settings omitted by the form, including base target.
                 updated = {**self.config_entry.options, **user_input}
                 updated.pop(CONF_SAFETY_ACK, None)
+                if updated[CONF_SHADOW]:
+                    # Back in shadow: the next live switch must ask again.
+                    updated.pop(CONF_SAFETY_ACK_AT, None)
+                elif needs_ack:
+                    updated[CONF_SAFETY_ACK] = True
+                    updated[CONF_SAFETY_ACK_AT] = dt_util.utcnow().isoformat()
+                else:
+                    # Already live: keep (or, for legacy entries, record) the ack.
+                    updated[CONF_SAFETY_ACK] = True
                 if climate_backend:
                     # An omitted optional field means "cleared"; write it explicitly so
                     # a value saved at setup (in entry data) cannot silently persist.
@@ -340,7 +361,8 @@ class PriceAwareThermostatOptionsFlow(OptionsFlowWithReload):
                 return self.async_create_entry(data=updated)
 
         schema = _settings_schema(
-            values, options=True, min_cycle_floor=60 if climate_backend else 0
+            values, options=True, min_cycle_floor=60 if climate_backend else 0,
+            ask_ack=not already_live,
         ).schema.copy()
         if CONF_HEATER in values:
             kind = values.get(CONF_CONTROL_TYPE, CONTROL_SWITCH)

@@ -52,6 +52,13 @@ Assistant instance.
 
 ### Changed
 
+- The options-flow safety confirmation is asked only when switching from shadow
+  to live control (and the actuator can only change in shadow, so a new actuator
+  is always confirmed). It is persisted as `safety_acknowledged` plus
+  `safety_acknowledged_at` (UTC ISO time), the checkbox is hidden while live, and
+  turning shadow mode on clears it. Entries already live under the previous
+  rule, which forced the tick on every save, count as acknowledged without a
+  migration.
 - Outage/recovery transitions of Nord Pool data are logged; HA platform
   semantics are declared.
 
