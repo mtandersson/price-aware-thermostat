@@ -78,15 +78,16 @@ changed price) is never replayed.
 | Start | `set_hvac_mode` to the wanted mode, then `set_temperature` if the target differs. |
 | Minimum restart pause | After the backend is observed off (and after a Home Assistant restart, counted from the first observation) a start waits for *Minimum cycle / pump restart pause*. |
 | Heat ↔ cool changeover | Always goes through off: off, restart pause, then the other mode. A foreign mode (for example `auto`) is treated the same way. |
-| Command spacing | Commands other than off, and other than a target completing its own start, are at least 60 s apart. Off is never delayed. |
+| Command spacing | Commands other than off, and other than a target sent within two minutes of its own start, are at least 60 s apart. A first off is never delayed; repeated offs are at least 60 s apart so another writer flipping the mode back cannot cause a command storm. The restart pause must be at least 60 s. |
 | Acknowledgment | Only the backend's observed mode/target acknowledges a command, with half a target step of tolerance for rounding. A successful service call alone is not an acknowledgment. |
-| Retries | An unacknowledged or failed command is retried after 120 s, at most three times, then paused for 15 minutes (`retries_exhausted`). |
+| Retries | An unacknowledged or failed command is retried after 120 s, at most three times, then paused (`retries_exhausted`): 15 minutes for a start or target change, 5 minutes for a safety off. A different command, or reaching "in sync", starts a fresh count. |
+| Start without a target | A pump is never started unless a native target is known; if the backend reports no valid limits, `command_status` is `invalid_backend_limits`. |
 | Wrapper set to off | The backend is commanded off. **Enabling live control while the wrapper is off therefore turns the pump off**; choose a mode first if the pump should keep running. |
-| Room temperature unavailable, invalid or stale | Fail-closed: off. Independent protection in the device remains essential. |
+| Room temperature unavailable, invalid or stale | Fail-closed: off. Independent protection in the device remains essential. For the first two minutes after the wrapper starts, a missing reading does not turn a running pump off (`command_status: startup_grace`), because the sensor often loads after the wrapper; this avoids a compressor off/on cycle on every restart. |
 | Backend unavailable | No commands; `backend_available` is false and `command_status` is `backend_unavailable`. Normal operation resumes when it returns. |
 | Backend lacks the wanted mode | No commands; `command_status` is `unsupported_backend_mode`. |
-| Service error | Logged, throttled and bounded as above. |
-| Restart | A restored heat/cool choice resumes after the restart pause. A pump already running in the restored mode keeps its demand rather than being pulsed off. |
+| Service error | Any exception from the backend is logged, throttled and bounded as above and does not stop the controller. |
+| Restart | A restored heat/cool choice resumes after the restart pause. A pump already running in the restored mode keeps its demand, decided by the first evaluation that can see both the backend and the room sensor, rather than being pulsed off. |
 | Options reload / unload | Pending work is cancelled; no command is sent after unload. |
 
 ### Windows and doors (optional)
@@ -95,8 +96,20 @@ Select binary sensors that report open as `on`. Operation pauses (off) after a
 contact has been open continuously for the *open delay*, and is reconsidered only
 after all contacts have been closed continuously for the *close delay*.
 Reconsideration starts from a fresh hysteresis state. A missing, `unavailable` or
-`unknown` contact is **unknown**: it never starts a pause and never ends one, and
-`window_status` reports `unknown`. Any open contact wins over unknown ones.
+`unknown` contact is **unknown**: it never starts a pause and never ends one,
+it restarts the open-time measurement (a contact flapping between open and
+unavailable never reaches the open delay), and `window_status` reports
+`unknown`. A window that is open while its contact is unavailable is therefore
+not detected. Any open contact wins over unknown ones.
+
+### Units
+
+Home Assistant reports a climate's limits and target, and expects service
+temperatures, in its system unit. The controller converts to and from Celsius
+internally; the `*_c` attributes are Celsius. The backend's target step is read
+as being in the system unit, as the Home Assistant frontend does. A backend whose
+step attribute is not in the system unit may be commanded to a slightly different
+grid value than intended (the backend rounds it itself).
 
 ### Ownership and reconciliation
 
@@ -135,6 +148,17 @@ Savings must not be inferred from a price-adjusted target alone. Real savings
 depend on thermal losses and the heat pump's efficiency; any analysis belongs to
 issue #7 and must state those assumptions.
 
+## Reconfiguring the price source
+
+Use the integration's **Reconfigure** action to move an entry to a different
+Nord Pool config entry and/or market area. It is allowed only while shadow mode
+is enabled and changes nothing else: the sensor, actuator, control type and
+other settings stay as they are, and entry/entity IDs are preserved. The source
+must be a `nordpool` entry that offers the chosen area, and the entry reloads
+on success. To change the sensor or actuator, use the options flow instead. A
+live entry must first be switched to shadow mode in the options before it can be
+reconfigured. See issue #3 for the safety rationale.
+
 ## Options
 
 Options can edit the sensor and actuator within the same control type, the AC
@@ -144,6 +168,8 @@ entry. Leaving *Maximum price adjustment* or *Window contacts* empty clears them
 Retargeting retains the wrapper entry/entity identity and updates the actuator
 unique ID used for duplicate detection. Options reload cancels the old worker.
 
-Before retargeting, save shadow mode first; for a switch the old switch must be
+Retargeting a heat-pump/AC entry requires shadow mode before and after, but does
+not check the old pump's state: live-to-shadow sends no command, so check and set
+the old backend yourself. Before retargeting, save shadow mode first; for a switch the old switch must be
 observed off and the new target must stay in shadow mode. This prevents leaving a
 live old heater on without its controller. No automatic handoff command is sent.

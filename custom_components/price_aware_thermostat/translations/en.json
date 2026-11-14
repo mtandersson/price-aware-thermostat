@@ -2,6 +2,14 @@
   "title": "Price-Aware Thermostat",
   "config": {
     "step": {
+      "reconfigure": {
+        "title": "Change Nord Pool source",
+        "description": "Only the Nord Pool configuration and market area can be changed, and only while shadow mode is enabled. To change the sensor or heater, use the integration options.",
+        "data": {
+          "nordpool_config_entry": "Nord Pool configuration",
+          "market_area": "Price market area"
+        }
+      },
       "user": {
         "title": "Add a price-aware thermostat",
         "description": "Choose a control type and an external temperature sensor. New entries start in shadow mode, which calculates decisions without sending any commands. The heat pump/AC type commands an existing climate entity from the room sensor once live control is confirmed.",
@@ -49,7 +57,9 @@
       "invalid_window_sensor": "Window/door contacts must be binary sensors."
     },
     "abort": {
-      "already_configured": "This actuator already has a Price-Aware Thermostat instance."
+      "already_configured": "This actuator already has a Price-Aware Thermostat instance.",
+      "reconfigure_successful": "The Nord Pool source and market area were updated.",
+      "reconfigure_live_not_allowed": "Source reconfiguration is only allowed in shadow mode. Enable shadow mode in the options first."
     }
   },
   "options": {

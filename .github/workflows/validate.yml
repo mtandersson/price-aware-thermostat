@@ -1,0 +1,35 @@
+name: Validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 5 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  hacs:
+    # The HACS action can only validate public repositories. While the repo is
+    # private this job is SKIPPED, which is not a pass: HACS validation is
+    # unverified until the repository is public.
+    if: ${{ github.event.repository.visibility == 'public' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Intentionally unpinned (@main / @master): both projects document these
+      # refs and track current validation rules. Trade-off: upstream changes can
+      # alter results without a change here; pin to a SHA if that is unwanted.
+      - uses: hacs/action@main
+        with:
+          category: integration
+          # No pull-request write permission; keep contents: read sufficient.
+          comment: false
+
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
