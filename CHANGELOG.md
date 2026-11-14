@@ -10,23 +10,16 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+`0.2.0` in `manifest.json` is only a placeholder version, not a release: no tag
+or GitHub release exists. The entries below reflect `main`. Open before any
+release: license decision, HACS validation (unverified while the repository is
+private) and an install/upgrade/remove/rollback test in a disposable Home
+Assistant instance.
+
 ### Added
 
 - HACS repository metadata (`hacs.json`), hassfest-conformant `manifest.json`
-  key order, a validation workflow, and release/support policy documentation.
-
-### Pending
-
-- Project license decision (blocks any public release).
-- Installation, upgrade, remove and rollback test in a disposable Home
-  Assistant instance.
-
-## [0.2.0] - Not released
-
-Version declared in `manifest.json`; no tag or GitHub release exists. Contents
-reflect `main` at the time of writing.
-
-### Added
+  key order, a validation workflow, and release/status documentation.
 
 - Control type selection: **Element / heating switch** and **Heat pump / AC
   climate**. The AC type is a shadow-only configuration preview (off mode,
