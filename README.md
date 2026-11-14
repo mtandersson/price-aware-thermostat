@@ -50,7 +50,7 @@ pytest -q tests/integration
 ruff check custom_components/price_aware_thermostat tests/integration
 ```
 
-See the [implementation plan](docs/implementation-plan.md) and [open issues](https://github.com/mtandersson/price-aware-thermostat/issues) for remaining safety, correctness and validation work.
+Development work is tracked in [GitHub issues](https://github.com/mtandersson/price-aware-thermostat/issues): [Nord Pool adapter (#2)](https://github.com/mtandersson/price-aware-thermostat/issues/2), [configuration (#3)](https://github.com/mtandersson/price-aware-thermostat/issues/3), [safe climate control (#4)](https://github.com/mtandersson/price-aware-thermostat/issues/4), [shadow diagnostics (#5)](https://github.com/mtandersson/price-aware-thermostat/issues/5), [commissioning (#6)](https://github.com/mtandersson/price-aware-thermostat/issues/6), and [benchmarking (#7)](https://github.com/mtandersson/price-aware-thermostat/issues/7).
 
 ## Important limitations
 
