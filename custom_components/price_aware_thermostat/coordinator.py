@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 import logging
-from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -37,6 +36,8 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
         self._area = str(entry.data[CONF_AREA])
         self._by_day: dict[date, tuple[PriceInterval, ...]] = {}
         self._tomorrow_retry_after: datetime | None = None
+        self._today_retry_after: datetime | None = None
+        self._today_retry_date: date | None = None
 
     async def _fetch_day(self, day: date) -> tuple[PriceInterval, ...]:
         """Call the official action with an explicit SEK currency."""
@@ -69,7 +70,15 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
             if old_day < today or old_day > tomorrow:
                 del self._by_day[old_day]
 
-        if today not in self._by_day:
+        if self._today_retry_date != today:
+            self._today_retry_date = today
+            self._today_retry_after = None
+            self._tomorrow_retry_after = None
+
+        if today not in self._by_day and (
+            self._today_retry_after is None or local_now >= self._today_retry_after
+        ):
+            self._today_retry_after = local_now + timedelta(hours=1)
             try:
                 self._by_day[today] = await self._fetch_day(today)
             except (HomeAssistantError, ValueError, LookupError) as exc:
