@@ -14,14 +14,17 @@ from homeassistant.config_entries import (
 from homeassistant.core import callback
 from homeassistant.helpers import selector
 
+from .backends import validate_backend
 from .const import (
     CONF_AREA,
     CONF_BASE_TEMP,
     CONF_COLD_TOLERANCE,
+    CONF_CONTROL_TYPE,
     CONF_DEADBAND,
     CONF_FILTER,
     CONF_HEATER,
     CONF_HOT_TOLERANCE,
+    CONF_HVAC_MODES,
     CONF_LOOKAHEAD,
     CONF_MAX_SENSOR_AGE,
     CONF_MAX_TEMP,
@@ -33,6 +36,8 @@ from .const import (
     CONF_SENSITIVITY,
     CONF_SENSOR,
     CONF_SHADOW,
+    CONTROL_CLIMATE,
+    CONTROL_SWITCH,
     DEFAULTS,
     DOMAIN,
 )
@@ -114,7 +119,7 @@ def _invalid_settings(settings: dict[str, Any]) -> bool:
 class PriceAwareThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
     """Configure an isolated price-aware thermostat."""
 
-    VERSION = 1
+    VERSION = 2
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -134,8 +139,8 @@ class PriceAwareThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "invalid_market_area"
             elif _invalid_settings(user_input):
                 errors["base"] = "invalid_temperature_range"
-            elif user_input[CONF_HEATER] == user_input[CONF_SENSOR]:
-                errors["base"] = "invalid_entities"
+            elif error := validate_backend(self.hass, user_input):
+                errors["base"] = error
             else:
                 # Prevent duplicate instances of this integration controlling
                 # the same heater, including when installed in shadow mode.
@@ -143,17 +148,26 @@ class PriceAwareThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
                     title=user_input[CONF_NAME],
-                    data={**user_input, CONF_AREA: area},
+                    data={**user_input, CONF_AREA: area,
+                          CONF_CONTROL_TYPE: user_input.get(CONF_CONTROL_TYPE, CONTROL_SWITCH)},
                     options={CONF_SHADOW: True},
                 )
 
         schema = {
+            vol.Required(CONF_CONTROL_TYPE, default=CONTROL_SWITCH): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[CONTROL_SWITCH, CONTROL_CLIMATE], translation_key="control_type"
+                )
+            ),
+            vol.Optional(CONF_HVAC_MODES, default=["heat"]): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=["heat", "cool"], multiple=True)
+            ),
             vol.Required(CONF_NAME, default="Price-Aware Thermostat"): selector.TextSelector(),
             vol.Required(CONF_SENSOR): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
             ),
             vol.Required(CONF_HEATER): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="switch")
+                selector.EntitySelectorConfig(domain=["switch", "climate"])
             ),
             vol.Required(CONF_NORDPOOL_ENTRY): selector.ConfigEntrySelector(
                 selector.ConfigEntrySelectorConfig(integration="nordpool")
@@ -182,19 +196,60 @@ class PriceAwareThermostatOptionsFlow(OptionsFlowWithReload):
     ) -> ConfigFlowResult:
         """Update configurable settings."""
         errors: dict[str, str] = {}
-        if user_input is not None:
-            if _invalid_settings(user_input):
-                errors["base"] = "invalid_temperature_range"
-            elif not user_input[CONF_SHADOW] and not user_input.get(CONF_SAFETY_ACK):
-                errors["base"] = "safety_confirmation_required"
-            else:
-                # Confirmation is one-shot, not a persistent setting.
-                user_input.pop(CONF_SAFETY_ACK, None)
-                return self.async_create_entry(data=user_input)
-
         values = {**self.config_entry.data, **self.config_entry.options}
+        climate_backend = values.get(CONF_CONTROL_TYPE) == CONTROL_CLIMATE
+        if user_input is not None:
+            merged = {**values, **user_input}
+            if _invalid_settings(merged):
+                errors["base"] = "invalid_temperature_range"
+            elif climate_backend and not merged[CONF_SHADOW]:
+                errors["base"] = "climate_live_not_supported"
+            elif not merged[CONF_SHADOW] and not user_input.get(CONF_SAFETY_ACK):
+                errors["base"] = "safety_confirmation_required"
+            elif CONF_HEATER in merged and (error := validate_backend(
+                self.hass, merged, entry_id=self.config_entry.entry_id
+            )):
+                errors["base"] = error
+            elif merged.get(CONF_HEATER) != values.get(CONF_HEATER) and (
+                not values.get(CONF_SHADOW, True)
+                or not merged.get(CONF_SHADOW, True)
+                or (not climate_backend and (
+                    (old := self.hass.states.get(values[CONF_HEATER])) is None
+                    or old.state != "off"
+                ))
+            ):
+                errors["base"] = "actuator_handoff_required"
+            else:
+                # Retain persisted settings omitted by the form, including base target.
+                updated = {**self.config_entry.options, **user_input}
+                updated.pop(CONF_SAFETY_ACK, None)
+                if updated.get(CONF_HEATER, values.get(CONF_HEATER)) != values.get(CONF_HEATER):
+                    # Entry/entity identity remains stable; actuator deduplication
+                    # must follow a deliberately changed physical target.
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry, unique_id=updated[CONF_HEATER]
+                    )
+                return self.async_create_entry(data=updated)
+
+        schema = _settings_schema(values, options=True).schema.copy()
+        if CONF_HEATER in values:
+            kind = values.get(CONF_CONTROL_TYPE, CONTROL_SWITCH)
+            schema.update({
+                vol.Required(CONF_SENSOR, default=values[CONF_SENSOR]): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+                ),
+                vol.Required(CONF_HEATER, default=values[CONF_HEATER]): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=kind)
+                ),
+            })
+            if climate_backend:
+                schema[vol.Required(CONF_HVAC_MODES, default=values.get(CONF_HVAC_MODES, ["heat"]))] = (
+                    selector.SelectSelector(
+                        selector.SelectSelectorConfig(options=["heat", "cool"], multiple=True)
+                    )
+                )
         return self.async_show_form(
             step_id="init",
-            data_schema=_settings_schema(values, options=True),
+            data_schema=vol.Schema(schema),
             errors=errors,
         )

@@ -4,6 +4,11 @@ from typing import Final
 
 DOMAIN: Final = "price_aware_thermostat"
 
+CONF_CONTROL_TYPE: Final = "control_type"
+CONF_HVAC_MODES: Final = "controlled_hvac_modes"
+CONTROL_SWITCH: Final = "switch"
+CONTROL_CLIMATE: Final = "climate"
+
 CONF_NAME: Final = "name"
 CONF_HEATER: Final = "heater"
 CONF_SENSOR: Final = "temperature_sensor"

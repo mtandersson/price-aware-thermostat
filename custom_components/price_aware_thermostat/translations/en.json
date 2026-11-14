@@ -4,24 +4,26 @@
     "step": {
       "user": {
         "title": "Add a price-aware thermostat",
-        "description": "The thermostat starts in shadow mode and will not control the heater until you explicitly enable actuation.",
+        "description": "Choose a control type and an external temperature sensor. Switch control starts in shadow mode. The AC/climate type is a configuration preview only; live control is not implemented yet.",
         "data": {
           "name": "Name",
           "temperature_sensor": "Temperature sensor",
-          "heater": "Heating switch",
+          "heater": "Controlled switch or climate",
           "nordpool_config_entry": "Nord Pool configuration",
           "market_area": "Price market area",
-          "base_temperature": "Base temperature (°C)",
-          "minimum_temperature": "Minimum permitted temperature (°C)",
-          "maximum_temperature": "Maximum permitted temperature (°C)",
+          "base_temperature": "Base temperature (\u00b0C)",
+          "minimum_temperature": "Minimum permitted temperature (\u00b0C)",
+          "maximum_temperature": "Maximum permitted temperature (\u00b0C)",
           "lookahead_minutes": "Price lookahead (minutes)",
           "filter_type": "Price filter",
           "deadband_sek_per_kwh": "Price deadband (SEK/kWh)",
-          "sensitivity_c_per_sek_per_kwh": "Sensitivity (°C per SEK/kWh)",
-          "cold_tolerance": "Heat-on tolerance (°C)",
-          "hot_tolerance": "Heat-off tolerance (°C)",
+          "sensitivity_c_per_sek_per_kwh": "Sensitivity (\u00b0C per SEK/kWh)",
+          "cold_tolerance": "Heat-on tolerance (\u00b0C)",
+          "hot_tolerance": "Heat-off tolerance (\u00b0C)",
           "min_cycle_seconds": "Minimum relay cycle time (seconds)",
-          "max_sensor_age_minutes": "Maximum temperature sample age (minutes)"
+          "max_sensor_age_minutes": "Maximum temperature sample age (minutes)",
+          "control_type": "Control type",
+          "controlled_hvac_modes": "Backend modes to configure (AC preview)"
         }
       }
     },
@@ -29,37 +31,65 @@
       "invalid_price_source": "Select a valid Nord Pool configuration entry.",
       "invalid_temperature_range": "The minimum temperature must be at or below the base temperature, which must be at or below the maximum.",
       "invalid_entities": "The sensor and heater must be different entities.",
-      "invalid_market_area": "Choose a market area configured in the selected Nord Pool integration."
+      "invalid_market_area": "Choose a market area configured in the selected Nord Pool integration.",
+      "invalid_backend": "Select a valid actuator matching the control type; switch control supports heating only.",
+      "invalid_room_sensor": "Select an available temperature sensor with a numeric reading and supported temperature unit.",
+      "invalid_actuator": "Select an available actuator matching the control type.",
+      "recursive_backend": "A Price-Aware Thermostat climate cannot control itself or another instance.",
+      "already_configured": "This actuator already has a Price-Aware Thermostat instance.",
+      "invalid_hvac_modes": "Select heat/cool modes supported by the backend, which must also support off.",
+      "invalid_backend_limits": "The climate must report finite, ordered temperature limits and a positive target step.",
+      "climate_live_not_supported": "AC/climate control is a shadow-only configuration preview. Live control is not implemented yet."
     },
     "abort": {
-      "already_configured": "This switch already has a Price-Aware Thermostat instance."
+      "already_configured": "This actuator already has a Price-Aware Thermostat instance."
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Thermostat settings",
-        "description": "Disabling shadow mode allows physical relay control. Verify your frost protection, existing thermostat and relay safety first.",
+        "description": "Switch control requires explicit safety confirmation. The AC/climate type remains a shadow-only configuration preview.",
         "data": {
-          "base_temperature": "Base temperature (°C)",
-          "minimum_temperature": "Minimum temperature (°C)",
-          "maximum_temperature": "Maximum temperature (°C)",
+          "base_temperature": "Base temperature (\u00b0C)",
+          "minimum_temperature": "Minimum temperature (\u00b0C)",
+          "maximum_temperature": "Maximum temperature (\u00b0C)",
           "lookahead_minutes": "Price lookahead (minutes)",
           "filter_type": "Price filter",
           "deadband_sek_per_kwh": "Price deadband (SEK/kWh)",
-          "sensitivity_c_per_sek_per_kwh": "Sensitivity (°C per SEK/kWh)",
-          "cold_tolerance": "Heat-on tolerance (°C)",
-          "hot_tolerance": "Heat-off tolerance (°C)",
+          "sensitivity_c_per_sek_per_kwh": "Sensitivity (\u00b0C per SEK/kWh)",
+          "cold_tolerance": "Heat-on tolerance (\u00b0C)",
+          "hot_tolerance": "Heat-off tolerance (\u00b0C)",
           "min_cycle_seconds": "Minimum cycle (seconds)",
           "shadow_mode": "Shadow mode (no relay control)",
           "safety_acknowledged": "I verified exclusive heater ownership and independent hardware safeguards",
-          "max_sensor_age_minutes": "Maximum temperature sample age (minutes)"
+          "max_sensor_age_minutes": "Maximum temperature sample age (minutes)",
+          "temperature_sensor": "External temperature sensor",
+          "heater": "Controlled actuator",
+          "controlled_hvac_modes": "Backend modes to configure (AC preview)"
         }
       }
     },
     "error": {
       "invalid_temperature_range": "Minimum must be no higher than base, and base must be no higher than maximum.",
-      "safety_confirmation_required": "Confirm safe ownership and hardware safeguards before enabling relay control."
+      "safety_confirmation_required": "Confirm safe ownership and hardware safeguards before enabling relay control.",
+      "invalid_backend": "Select a valid actuator matching the control type; switch control supports heating only.",
+      "invalid_room_sensor": "Select an available temperature sensor with a numeric reading and supported temperature unit.",
+      "invalid_actuator": "Select an available actuator matching the control type.",
+      "recursive_backend": "A Price-Aware Thermostat climate cannot control itself or another instance.",
+      "already_configured": "This actuator already has a Price-Aware Thermostat instance.",
+      "invalid_hvac_modes": "Select heat/cool modes supported by the backend, which must also support off.",
+      "invalid_backend_limits": "The climate must report finite, ordered temperature limits and a positive target step.",
+      "climate_live_not_supported": "AC/climate control is a shadow-only configuration preview. Live control is not implemented yet.",
+      "actuator_handoff_required": "Before changing the actuator, save shadow mode, confirm the previous switch is off, and keep the new actuator in shadow mode."
+    }
+  },
+  "selector": {
+    "control_type": {
+      "options": {
+        "switch": "Element / heating switch",
+        "climate": "Heat pump / AC climate (preview)"
+      }
     }
   }
 }

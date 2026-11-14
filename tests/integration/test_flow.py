@@ -1,5 +1,6 @@
 """Configuration validation tests against actual Home Assistant."""
 
+import pytest
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -16,6 +17,13 @@ from custom_components.price_aware_thermostat.const import (
     CONF_SENSOR,
     DOMAIN,
 )
+
+
+@pytest.fixture(autouse=True)
+def selected_entities(hass: HomeAssistant) -> None:
+    """A configuration submission must reference actual available entities."""
+    hass.states.async_set("sensor.temperature", "6", {"unit_of_measurement": "°C"})
+    hass.states.async_set("switch.heater", "off")
 
 
 async def test_config_flow_rejects_inverted_temperature_limits(hass: HomeAssistant) -> None:
