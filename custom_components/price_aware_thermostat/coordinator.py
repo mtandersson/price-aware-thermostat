@@ -41,6 +41,7 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
         self._tomorrow_retry_after: datetime | None = None
         self._today_retry_after: datetime | None = None
         self._today_retry_date: date | None = None
+        self._today_prices_unavailable = False
 
     async def _fetch_day(self, day: date) -> tuple[PriceInterval, ...]:
         """Call the official action with an explicit SEK currency."""
@@ -85,10 +86,16 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
             try:
                 self._by_day[today] = await self._fetch_day(today)
             except (HomeAssistantError, ValueError, LookupError) as exc:
-                _LOGGER.warning(
-                    "Could not fetch today's Nord Pool prices; base temperature remains active: %s",
-                    exc,
-                )
+                if not self._today_prices_unavailable:
+                    _LOGGER.warning(
+                        "Nord Pool prices unavailable; using the base temperature: %s",
+                        exc,
+                    )
+                    self._today_prices_unavailable = True
+            else:
+                if self._today_prices_unavailable:
+                    _LOGGER.info("Nord Pool price data available again")
+                    self._today_prices_unavailable = False
 
         # Tomorrow's prices are normally published after 13:00 CET/CEST.
         if (
