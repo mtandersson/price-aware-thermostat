@@ -41,7 +41,11 @@
           "maximum_price_deviation": "Maximum price adjustment around your target (\u00b0C, default 0.8; 0 disables price adjustment)",
           "window_contacts": "Window/door contacts (optional)",
           "window_open_delay_seconds": "Open longer than this pauses operation (seconds)",
-          "window_close_delay_seconds": "Closed at least this long before resuming (seconds)"
+          "window_close_delay_seconds": "Closed at least this long before resuming (seconds)",
+          "outdoor_temperature_sensor": "Outdoor temperature sensor (optional)",
+          "cool_min_outdoor_temperature": "Cool only when outdoor is at or above (\u00b0C, optional)",
+          "heat_max_outdoor_temperature": "Heat only when outdoor is at or below (\u00b0C, optional)",
+          "outdoor_lockout_hysteresis": "Outdoor lockout hysteresis (\u00b0C)"
         },
         "data_description": {
           "name": "Display name of the new thermostat entity. Example: Garage heater.",
@@ -67,7 +71,11 @@
           "maximum_price_deviation": "Largest price adjustment, \u00b1 \u00b0C around your target, for all control types; min/max still apply. Example: 0.8 with target 21 keeps it within 20.2\u201321.8 \u00b0C. 0 turns price adjustment off.",
           "window_contacts": "Binary sensors for windows or doors. When any one stays open, the heat pump is paused; unknown contacts neither pause nor resume it.",
           "window_open_delay_seconds": "A contact must stay open this many seconds before the heat pump is turned off. Example: 120.",
-          "window_close_delay_seconds": "All contacts must stay closed this many seconds before operation resumes. Example: 60."
+          "window_close_delay_seconds": "All contacts must stay closed this many seconds before operation resumes. Example: 60.",
+          "outdoor_temperature_sensor": "Temperature sensor outdoors, used by the two lockouts below. If it is missing, unavailable or older than the maximum sensor age, nothing is locked.",
+          "cool_min_outdoor_temperature": "Cooling is blocked while it is colder outside than this. Leave empty to never block cooling. Example: 15.",
+          "heat_max_outdoor_temperature": "Heating is blocked while it is warmer outside than this. Leave empty to never block heating. Example: 15.",
+          "outdoor_lockout_hysteresis": "A lockout is released only once the outdoor temperature is this far past the limit on the allowed side. Example: 1.0 with a 15 \u00b0C heating limit releases at 14 \u00b0C."
         }
       }
     },
@@ -84,7 +92,8 @@
       "invalid_hvac_modes": "Select heat/cool modes supported by the backend, which must also support off.",
       "invalid_backend_limits": "The climate must support a target temperature and report finite, ordered temperature limits and a positive target step.",
       "invalid_ac_settings": "Compensation must be within \u00b110 \u00b0C, the restart pause 60\u20133600 seconds, window delays 0\u20133600 seconds and the price deviation 0\u201320 \u00b0C.",
-      "invalid_window_sensor": "Window/door contacts must be binary sensors."
+      "invalid_window_sensor": "Window/door contacts must be binary sensors.",
+      "invalid_outdoor_sensor": "The outdoor sensor must be a sensor that reports a temperature in \u00b0C, \u00b0F or K."
     },
     "abort": {
       "already_configured": "This actuator already has a Price-Aware Thermostat instance.",
@@ -120,7 +129,11 @@
           "window_open_delay_seconds": "Open longer than this pauses operation (seconds)",
           "window_close_delay_seconds": "Closed at least this long before resuming (seconds)",
           "nordpool_config_entry": "Price source (Nord Pool integration; future prices are fetched via its action)",
-          "market_area": "Nord Pool market area (for example SE3)"
+          "market_area": "Nord Pool market area (for example SE3)",
+          "outdoor_temperature_sensor": "Outdoor temperature sensor (optional)",
+          "cool_min_outdoor_temperature": "Cool only when outdoor is at or above (\u00b0C, optional)",
+          "heat_max_outdoor_temperature": "Heat only when outdoor is at or below (\u00b0C, optional)",
+          "outdoor_lockout_hysteresis": "Outdoor lockout hysteresis (\u00b0C)"
         },
         "data_description": {
           "base_temperature": "Your normal target in \u00b0C. Price adjustment moves the target around this value. Example: 6.0 for a frost-protected garage, 21 for a living room.",
@@ -146,7 +159,11 @@
           "window_open_delay_seconds": "A contact must stay open this many seconds before the heat pump is turned off. Example: 120.",
           "window_close_delay_seconds": "All contacts must stay closed this many seconds before operation resumes. Example: 60.",
           "nordpool_config_entry": "The official Nord Pool integration entry that supplies electricity prices. Can be changed in live mode too, because it never commands the device.",
-          "market_area": "Price area to read from the Nord Pool source, for example SE3 or SE4. It must be one of the areas configured there."
+          "market_area": "Price area to read from the Nord Pool source, for example SE3 or SE4. It must be one of the areas configured there.",
+          "outdoor_temperature_sensor": "Temperature sensor outdoors, used by the two lockouts below. If it is missing, unavailable or older than the maximum sensor age, nothing is locked.",
+          "cool_min_outdoor_temperature": "Cooling is blocked while it is colder outside than this. Leave empty to never block cooling. Example: 15.",
+          "heat_max_outdoor_temperature": "Heating is blocked while it is warmer outside than this. Leave empty to never block heating. Example: 15.",
+          "outdoor_lockout_hysteresis": "A lockout is released only once the outdoor temperature is this far past the limit on the allowed side. Example: 1.0 with a 15 \u00b0C heating limit releases at 14 \u00b0C."
         }
       }
     },
@@ -162,7 +179,8 @@
       "invalid_backend_limits": "The climate must support a target temperature and report finite, ordered temperature limits and a positive target step.",
       "actuator_handoff_required": "Before changing the actuator, save shadow mode, confirm the previous switch is off, and keep the new actuator in shadow mode.",
       "invalid_ac_settings": "Compensation must be within \u00b110 \u00b0C, the restart pause 60\u20133600 seconds, window delays 0\u20133600 seconds and the price deviation 0\u201320 \u00b0C.",
-      "invalid_window_sensor": "Window/door contacts must be binary sensors."
+      "invalid_window_sensor": "Window/door contacts must be binary sensors.",
+      "invalid_outdoor_sensor": "The outdoor sensor must be a sensor that reports a temperature in \u00b0C, \u00b0F or K."
     }
   },
   "selector": {

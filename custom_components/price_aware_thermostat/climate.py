@@ -37,6 +37,7 @@ from .ac_control import (
     CommandMemory,
     Intent,
     Observation,
+    OutdoorLockout,
     Plan,
     WindowGuard,
     aggregate_contacts,
@@ -50,9 +51,11 @@ from .const import (
     CONF_BASE_TEMP,
     CONF_COLD_TOLERANCE,
     CONF_COOL_COMPENSATION,
+    CONF_COOL_MIN_OUTDOOR,
     CONF_DEADBAND,
     CONF_FILTER,
     CONF_HEAT_COMPENSATION,
+    CONF_HEAT_MAX_OUTDOOR,
     CONF_HOT_TOLERANCE,
     CONF_LOOKAHEAD,
     CONF_MAX_DEVIATION,
@@ -60,6 +63,8 @@ from .const import (
     CONF_MAX_TEMP,
     CONF_MIN_CYCLE,
     CONF_MIN_TEMP,
+    CONF_OUTDOOR_HYSTERESIS,
+    CONF_OUTDOOR_SENSOR,
     CONF_SENSITIVITY,
     CONF_SENSOR,
     CONF_SHADOW,
@@ -530,13 +535,81 @@ class ClimateBackendThermostat(PriceAwareThermostat):
         self._in_sync = False
         self._window_status = "not_configured"
         self._reported_action: HVACAction | None = None
+        # Optional outdoor lockouts; an absent sensor or threshold disables them.
+        outdoor = settings.get(CONF_OUTDOOR_SENSOR)
+        self._outdoor_sensor = outdoor if isinstance(outdoor, str) and outdoor else None
+
+        def threshold(key: str) -> float | None:
+            value = settings.get(key)
+            return None if value is None or isinstance(value, bool) else float(value)
+
+        self._lockout = OutdoorLockout(
+            cool_min=threshold(CONF_COOL_MIN_OUTDOOR),
+            heat_max=threshold(CONF_HEAT_MAX_OUTDOOR),
+            hysteresis=float(
+                settings.get(CONF_OUTDOOR_HYSTERESIS, DEFAULTS[CONF_OUTDOOR_HYSTERESIS])
+            ),
+        )
+        self._outdoor_c: float | None = None
+        self._outdoor_status = "not_configured"
 
     # -- hooks used by the shared optimizer code -------------------------------
     def _optimizer_mode(self) -> Literal["heat", "cool"]:
         return "cool" if self._attr_hvac_mode == HVACMode.COOL else "heat"
 
     def _tracked_entities(self) -> list[str]:
-        return [self._sensor, self._heater, *self._windows]
+        outdoor = [self._outdoor_sensor] if self._outdoor_sensor else []
+        return [self._sensor, self._heater, *self._windows, *outdoor]
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the outdoor lockout state so a restart does not flap it."""
+        old = await self.async_get_last_state()
+        if old is not None:
+            self._lockout.heat_locked = (
+                self._lockout.heat_max is not None
+                and old.attributes.get("outdoor_heat_locked") is True
+            )
+            self._lockout.cool_locked = (
+                self._lockout.cool_min is not None
+                and old.attributes.get("outdoor_cool_locked") is True
+            )
+        await super().async_added_to_hass()
+
+    def _update_outdoor(self) -> None:
+        """Read the outdoor sensor and update the lockouts; faults fail open."""
+        if self._outdoor_sensor is None:
+            self._outdoor_c = None
+            self._outdoor_status = "not_configured"
+            self._lockout.update(None)
+            return
+        state = self.hass.states.get(self._outdoor_sensor)
+        value: float | None = None
+        if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+            status = "unavailable"
+        elif not is_temperature_sample_fresh(
+            getattr(state, "last_reported", None), dt_util.utcnow(), self._max_sensor_age
+        ):
+            status = "stale"
+        else:
+            unit = state.attributes.get("unit_of_measurement")
+            value = parse_temperature_celsius(state.state, unit if isinstance(unit, str) else None)
+            status = "ok" if value is not None else "invalid"
+        if status != "ok" and status != self._outdoor_status:
+            _LOGGER.warning(
+                "Outdoor temperature sensor %s is %s; outdoor lockouts are released",
+                self._outdoor_sensor, status,
+            )
+        self._outdoor_status = status
+        self._outdoor_c = value
+        self._lockout.update(value)
+
+    def _outdoor_lockout(self) -> str:
+        """The lockout affecting the wrapper's current direction (none/heat/cool)."""
+        if self._attr_hvac_mode == HVACMode.HEAT and self._lockout.heat_locked:
+            return "heat"
+        if self._attr_hvac_mode == HVACMode.COOL and self._lockout.cool_locked:
+            return "cool"
+        return "none"
 
     # -- units -----------------------------------------------------------------
     # Home Assistant shows climate limits and targets, and expects service
@@ -620,6 +693,7 @@ class ClimateBackendThermostat(PriceAwareThermostat):
         self, observed: Observation, limits: BackendLimits | None, mono: float
     ) -> Intent:
         """Combine mode, windows, sensor health, price and hysteresis into an intent."""
+        self._update_outdoor()
         reading = self._window_reading()
         paused = self._window_guard.update(reading, mono) if self._windows else False
         if not self._windows:
@@ -642,6 +716,10 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             # Reconsideration after closure starts from a fresh hysteresis state.
             self._demand_active = False
             return Intent("off", None, "window_open")
+        if self._lockout.locks(wanted):
+            # Only the locked direction is affected; the wrapper mode is kept.
+            self._demand_active = False
+            return Intent("off", None, "outdoor_lockout")
         current = self._attr_native_current_temperature
         if current is None:
             self._demand_active = False
@@ -696,6 +774,8 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             self._attr_native_current_temperature, self._attr_hvac_action, self._last_result,
             self._sensor_fresh, self._intent, self._plan.status, self._observed,
             self._window_status, self._in_sync, self._reported_action,
+            self._outdoor_c, self._outdoor_status,
+            self._lockout.heat_locked, self._lockout.cool_locked,
         )
 
     async def _async_evaluate(self) -> None:
@@ -809,9 +889,15 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             "command_status": self._plan.status,
             "pause_reason": (
                 "window_open" if self._window_status == "open_paused"
+                else "outdoor_lockout" if self._intent.reason == "outdoor_lockout"
                 else "restart_pause" if self._plan.status == "restart_pause"
                 else None
             ),
             "window_status": self._window_status,
+            "outdoor_temperature_c": self._outdoor_c,
+            "outdoor_sensor_status": self._outdoor_status,
+            "outdoor_lockout": self._outdoor_lockout(),
+            "outdoor_heat_locked": self._lockout.heat_locked,
+            "outdoor_cool_locked": self._lockout.cool_locked,
             "planned_heating": None,
         }
