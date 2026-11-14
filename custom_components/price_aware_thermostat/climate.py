@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import timedelta
 from math import isfinite
 from typing import Any
@@ -53,6 +54,7 @@ from .control import (
 )
 from .coordinator import NordPoolPriceCoordinator
 from .optimizer import Filter, OptimizationResult, OptimizerConfig, optimize
+from .relay_guard import RelayCommandGuard
 
 _LOGGER = logging.getLogger(__name__)
 PRESET_PRICE_AWARE = "price_aware"
@@ -115,6 +117,7 @@ class PriceAwareThermostat(RestoreClimate):
         self._planned_heating: bool | None = None
         self._sensor_fresh = False
         self._control_lock = asyncio.Lock()
+        self._relay_guard = RelayCommandGuard()
 
     @property
     def _base_target(self) -> float:
@@ -283,19 +286,30 @@ class PriceAwareThermostat(RestoreClimate):
             if not self._shadow and heater_state is not None and heater_state.state in (
                 STATE_ON, STATE_OFF,
             ):
-                # No temperature reading: stop heating rather than applying a
-                # possibly stale actuator state. Hardware frost protection must
-                # remain an independent safety layer.
+                # A successful service call is not a physical acknowledgment.
+                # Only an observed relay state clears a pending command.
+                self._relay_guard.acknowledge(currently_on)
                 if desired is None:
                     desired = False
-                if desired != currently_on:
+                now_monotonic = time.monotonic()
+                if self._relay_guard.should_dispatch(
+                    desired, currently_on, now_monotonic
+                ):
                     forced_off = (
                         self._attr_hvac_mode == HVACMode.OFF
                         or self._attr_native_current_temperature is None
                     )
+                    corrective_off = (
+                        self._relay_guard.pending_state is True and not desired
+                    )
                     age = dt_util.utcnow() - heater_state.last_changed
-                    if forced_off or age >= timedelta(seconds=self._min_cycle):
+                    if forced_off or corrective_off or age >= timedelta(
+                        seconds=self._min_cycle
+                    ):
                         service = "turn_on" if desired else "turn_off"
+                        # Record before awaiting so failed or interrupted calls
+                        # also have a retry cooldown.
+                        self._relay_guard.record_attempt(desired, now_monotonic)
                         try:
                             await self.hass.services.async_call(
                                 "switch", service,
