@@ -18,6 +18,8 @@ Assistant instance.
 
 ### Added
 
+- Bounded price-action (30 s) and switch/climate-action (10 s) waits, with
+  cancellation and retry/corrective-OFF regressions (#12).
 - Engineering quality evidence for all 54 HA rules, actionable entry-specific
   Nord Pool source repairs, full config-flow line/branch coverage and CI
   enforcement of >95% coverage per integration module (#12).

@@ -79,6 +79,8 @@ from .coordinator import NordPoolPriceCoordinator
 from .optimizer import Filter, OptimizationResult, OptimizerConfig, optimize
 from .relay_guard import RelayCommandGuard
 
+ACTUATOR_TIMEOUT_SECONDS = 10
+
 _LOGGER = logging.getLogger(__name__)
 PRESET_PRICE_AWARE = "price_aware"
 PRESET_FIXED = "fixed"
@@ -416,12 +418,13 @@ class PriceAwareThermostat(RestoreClimate):
                         # also have a retry cooldown.
                         self._relay_guard.record_attempt(desired, now_monotonic)
                         try:
-                            await self.hass.services.async_call(
-                                "switch", service,
-                                {"entity_id": self._heater},
-                                blocking=True,
-                            )
-                        except HomeAssistantError:
+                            async with asyncio.timeout(ACTUATOR_TIMEOUT_SECONDS):
+                                await self.hass.services.async_call(
+                                    "switch", service,
+                                    {"entity_id": self._heater},
+                                    blocking=True,
+                                )
+                        except (HomeAssistantError, TimeoutError):
                             _LOGGER.exception("Could not change the heating relay")
             updated = (
                 self._attr_native_current_temperature,
@@ -665,17 +668,18 @@ class ClimateBackendThermostat(PriceAwareThermostat):
         self._memory.record(command, mono)
         data: dict[str, Any] = {"entity_id": self._heater}
         try:
-            if command.kind == "set_mode":
-                data["hvac_mode"] = command.mode
-                await self.hass.services.async_call(
-                    "climate", "set_hvac_mode", data, blocking=True
-                )
-            else:
-                assert command.target is not None
-                data["temperature"] = self._from_celsius(command.target)
-                await self.hass.services.async_call(
-                    "climate", "set_temperature", data, blocking=True
-                )
+            async with asyncio.timeout(ACTUATOR_TIMEOUT_SECONDS):
+                if command.kind == "set_mode":
+                    data["hvac_mode"] = command.mode
+                    await self.hass.services.async_call(
+                        "climate", "set_hvac_mode", data, blocking=True
+                    )
+                else:
+                    assert command.target is not None
+                    data["temperature"] = self._from_celsius(command.target)
+                    await self.hass.services.async_call(
+                        "climate", "set_temperature", data, blocking=True
+                    )
         except Exception:
             # Any backend failure (including non-HomeAssistantError exceptions from
             # a third-party integration) is logged and bounded by the retry rules;

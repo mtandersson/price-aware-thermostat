@@ -87,9 +87,9 @@ is evidence, not another implementation backlog.
 
 ## Verification and software safety review
 
-Baseline before this audit: 317 tests, 22 subtests, 97% line coverage. The quality
-change adds source repair lifecycle/error recovery tests and full config-flow
-branch coverage. CI also runs Ruff, strict mypy, Python 3.12/3.13 pure tests and
+Baseline before this audit: 317 tests, 22 subtests, 97% line coverage. The completed audit has 335 passing tests and 22 passing subtests, with
+97.47% combined line/branch coverage and 100% config-flow line/branch coverage.
+It adds source repair lifecycle/error recovery and stalled-service tests. CI also runs Ruff, strict mypy, Python 3.12/3.13 pure tests and
 hassfest. The HACS check is skipped for a private repository; that is not a pass.
 
 The HA test harness enables event-loop debug and checks lingering tasks/timers.
@@ -97,6 +97,13 @@ The HA test harness enables event-loop debug and checks lingering tasks/timers.
 work. `test_ac_climate.py` covers obsolete intent, command retries, off/changeover,
 restart and cancellation; `test_control_type_matrix.py` checks both types.
 Source review found no blocking file/network calls in runtime control/refresh.
+Price actions have a 30-second timeout per date; switch/climate actions have a
+10-second timeout. Timeout cancels the waiting coroutine, preserves retry
+throttling and allows a fresh corrective OFF decision. Cancellation is
+cooperative: a device integration may already have transmitted a command, so
+observed state and hardware protection still matter. `test_service_timeouts.py`
+checks cancellation, no immediate retry storm and corrective OFF.
+
 These checks bound software work; they do not prove latency under every external
 integration or physical failure condition.
 

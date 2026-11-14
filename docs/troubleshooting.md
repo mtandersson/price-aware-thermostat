@@ -69,6 +69,16 @@ That is the intended behavior. Shadow mode computes a plan without sending any h
 
 A successful Home Assistant service response is not a physical relay acknowledgement. The controller uses observed switch state and rate-limits retry attempts. Check the hardware integration's device status before assuming the heater changed state.
 
+### A service action stops responding
+
+Price requests time out after 30 seconds per requested date; actuator requests
+use a 10-second timeout. A timeout cancels the waiting coroutine and preserves
+the ordinary retry cooldown. Price timeouts fall back to the base target;
+actuator timeouts remain unacknowledged until observed state confirms them.
+The controller can reconsider current intent, including a corrective OFF.
+Cancellation is cooperative and cannot undo a command already sent to a device;
+check its actual state and retain independent hardware safeguards.
+
 ### Home Assistant restarts, unloads or reloads the integration
 
 Persistent base target and user modes are covered by automated tests. However, the physical switch and its own restore behavior depend on the actuator integration and hardware. Do not rely on software restart recovery as independent frost protection.

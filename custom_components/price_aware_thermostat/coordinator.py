@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING
@@ -21,6 +22,8 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
+PRICE_FETCH_TIMEOUT_SECONDS = 30
+
 FAILURE_SERVICE_ERROR = "service_error"
 FAILURE_INVALID_RESPONSE = "invalid_response"
 FAILURE_AREA_MISSING = "area_missing"
@@ -39,7 +42,7 @@ def _failure_kind(exc: Exception) -> str:
     """Map an exception to a coarse failure kind without exposing its text."""
     if isinstance(exc, PriceFetchError):
         return exc.kind
-    if isinstance(exc, HomeAssistantError):
+    if isinstance(exc, (HomeAssistantError, TimeoutError)):
         return FAILURE_SERVICE_ERROR
     return FAILURE_INVALID_RESPONSE
 
@@ -113,18 +116,19 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
 
     async def _fetch_day(self, day: date) -> tuple[PriceInterval, ...]:
         """Call the official action with an explicit SEK currency."""
-        response = await self.hass.services.async_call(
-            "nordpool",
-            "get_prices_for_date",
-            {
-                "config_entry": self._source_entry_id,
-                "date": day.isoformat(),
-                "areas": [self._area],
-                "currency": "SEK",
-            },
-            blocking=True,
-            return_response=True,
-        )
+        async with asyncio.timeout(PRICE_FETCH_TIMEOUT_SECONDS):
+            response = await self.hass.services.async_call(
+                "nordpool",
+                "get_prices_for_date",
+                {
+                    "config_entry": self._source_entry_id,
+                    "date": day.isoformat(),
+                    "areas": [self._area],
+                    "currency": "SEK",
+                },
+                blocking=True,
+                return_response=True,
+            )
         if not isinstance(response, dict):
             raise PriceFetchError(
                 FAILURE_INVALID_RESPONSE, "Nord Pool returned an invalid response"
@@ -170,7 +174,7 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
             self._today_retry_after = local_now + timedelta(hours=1)
             try:
                 self._by_day[today] = await self._fetch_day(today)
-            except (HomeAssistantError, ValueError, LookupError) as exc:
+            except (HomeAssistantError, TimeoutError, ValueError, LookupError) as exc:
                 self._today_failure = _failure_kind(exc)
                 if not self._today_prices_unavailable:
                     _LOGGER.warning(
@@ -197,7 +201,7 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
             self._tomorrow_retry_after = local_now + timedelta(minutes=30)
             try:
                 self._by_day[tomorrow] = await self._fetch_day(tomorrow)
-            except (HomeAssistantError, ValueError, LookupError) as exc:
+            except (HomeAssistantError, TimeoutError, ValueError, LookupError) as exc:
                 self._tomorrow_failure = _failure_kind(exc)
                 _LOGGER.debug("Tomorrow's Nord Pool prices are not yet available: %s", exc)
             else:
