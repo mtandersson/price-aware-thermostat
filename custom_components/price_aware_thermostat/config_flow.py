@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 import probatio as vol
-
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -30,8 +29,8 @@ from .const import (
     CONF_NAME,
     CONF_NORDPOOL_ENTRY,
     CONF_SAFETY_ACK,
-    CONF_SENSOR,
     CONF_SENSITIVITY,
+    CONF_SENSOR,
     CONF_SHADOW,
     DEFAULTS,
     DOMAIN,
