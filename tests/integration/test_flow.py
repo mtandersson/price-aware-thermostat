@@ -65,7 +65,7 @@ async def test_config_flow_creates_shadow_entry(hass: HomeAssistant) -> None:
         CONF_SENSOR: "sensor.temperature",
         CONF_HEATER: "switch.heater",
         CONF_NORDPOOL_ENTRY: source.entry_id,
-        CONF_AREA: "SE4",
+        CONF_AREA: "se4",
         CONF_MIN_TEMP: 5.0,
         CONF_BASE_TEMP: 6.0,
         CONF_MAX_TEMP: 8.0,
