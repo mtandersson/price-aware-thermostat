@@ -37,6 +37,7 @@ from .const import (
     CONF_HEATER,
     CONF_HOT_TOLERANCE,
     CONF_LOOKAHEAD,
+    CONF_MAX_SENSOR_AGE,
     CONF_MAX_TEMP,
     CONF_MIN_CYCLE,
     CONF_MIN_TEMP,
@@ -45,7 +46,7 @@ from .const import (
     CONF_SHADOW,
     DEFAULTS,
 )
-from .control import desired_heater_state
+from .control import desired_heater_state, is_temperature_sample_fresh
 from .coordinator import NordPoolPriceCoordinator
 from .optimizer import OptimizationResult, OptimizerConfig, optimize
 
@@ -87,6 +88,9 @@ class PriceAwareThermostat(RestoreClimate):
         self._heater = str(settings[CONF_HEATER])
         self._shadow = bool(settings.get(CONF_SHADOW, True))
         self._min_cycle = int(settings.get(CONF_MIN_CYCLE, DEFAULTS[CONF_MIN_CYCLE]))
+        self._max_sensor_age = timedelta(
+            minutes=int(settings.get(CONF_MAX_SENSOR_AGE, DEFAULTS[CONF_MAX_SENSOR_AGE]))
+        )
         self._cold_tolerance = float(
             settings.get(CONF_COLD_TOLERANCE, DEFAULTS[CONF_COLD_TOLERANCE])
         )
@@ -105,6 +109,7 @@ class PriceAwareThermostat(RestoreClimate):
         self._attr_hvac_action = HVACAction.IDLE
         self._last_result: OptimizationResult | None = None
         self._planned_heating: bool | None = None
+        self._sensor_fresh = False
         self._control_lock = asyncio.Lock()
 
     def _calculate(self) -> OptimizationResult:
@@ -131,6 +136,7 @@ class PriceAwareThermostat(RestoreClimate):
         result = self._last_result
         return {
             "shadow_mode": self._shadow,
+            "temperature_sample_fresh": self._sensor_fresh,
             "effective_target_c": (
                 result.effective_target_c if result else self._attr_native_target_temperature
             ),
@@ -187,11 +193,20 @@ class PriceAwareThermostat(RestoreClimate):
                 self._attr_hvac_action,
                 self._last_result,
                 self._planned_heating,
+                self._sensor_fresh,
             )
             temp_state = self.hass.states.get(self._sensor)
             heater_state = self.hass.states.get(self._heater)
             self._attr_native_current_temperature = None
-            if temp_state is not None and temp_state.state not in (
+            self._sensor_fresh = (
+                temp_state is not None
+                and is_temperature_sample_fresh(
+                    getattr(temp_state, "last_reported", None),
+                    dt_util.utcnow(),
+                    self._max_sensor_age,
+                )
+            )
+            if self._sensor_fresh and temp_state is not None and temp_state.state not in (
                 STATE_UNKNOWN, STATE_UNAVAILABLE,
             ):
                 try:
@@ -200,6 +215,9 @@ class PriceAwareThermostat(RestoreClimate):
                         self._attr_native_current_temperature = value
                 except ValueError:
                     pass
+            self._sensor_fresh = (
+                self._sensor_fresh and self._attr_native_current_temperature is not None
+            )
 
             try:
                 self._last_result = self._calculate()
@@ -265,6 +283,7 @@ class PriceAwareThermostat(RestoreClimate):
                 self._attr_hvac_action,
                 self._last_result,
                 self._planned_heating,
+                self._sensor_fresh,
             )
             if previous != updated:
                 self.async_write_ha_state()

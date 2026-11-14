@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from math import isfinite
 
 
@@ -24,3 +25,23 @@ def desired_heater_state(
     if currently_on:
         return current_c < target_c + hot_tolerance
     return current_c <= target_c - cold_tolerance
+
+
+def is_temperature_sample_fresh(
+    last_reported: datetime | None,
+    now: datetime,
+    max_age: timedelta,
+) -> bool:
+    """Accept only recently reported temperature readings.
+
+    `last_reported` (not `last_changed`) allows sensors that periodically
+    report the same temperature. A missing timestamp is not evidence of
+    a healthy sensor. This check guards software logic; hardware thermal
+    safeguards remain mandatory.
+    """
+    if last_reported is None or last_reported.tzinfo is None or now.tzinfo is None:
+        return False
+    if max_age <= timedelta(0):
+        raise ValueError("Maximum sensor age must be positive")
+    age = now - last_reported
+    return timedelta(0) <= age <= max_age
