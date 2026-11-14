@@ -157,6 +157,8 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
             self._today_retry_date = today
             self._today_retry_after = None
             self._tomorrow_retry_after = None
+            # A failure recorded for yesterday's "tomorrow" no longer applies today.
+            self._tomorrow_failure = None
 
         if today not in self._by_day and (
             self._today_retry_after is None or local_now >= self._today_retry_after
