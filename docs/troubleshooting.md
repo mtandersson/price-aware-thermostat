@@ -36,6 +36,8 @@ The normal thermostat UI temperature is the base target; `effective_target_c` is
 
 The climate entity exposes `shadow_mode`, `temperature_sample_fresh`, `planned_heating`, `effective_target_c`, `optimization_reason`, current electricity price, weighted future price, price difference, forecast coverage, `requested_adjustment_c` (what pricing asked for before comfort limits) and `adjustment_clamped` (limits reduced or removed it). The integration's downloadable diagnostics omit private entity IDs, room names and temperature measurements.
 
+The downloadable diagnostics (`version` 2) also contain a `price_freshness` section: `last_success_utc` (last successful price fetch), `today_cached` and `tomorrow_cached`, `today_failure` and `tomorrow_failure`, and `today_retry_after_utc` / `tomorrow_retry_after_utc` (earliest next attempt while that day is not cached). A failure is one coarse kind, never raw error text: `service_error` (the action raised an error), `area_missing` (the response has no series for the configured market area), `no_prices` (an empty series, e.g. tomorrow not yet published), or `invalid_response` (malformed, naive-timestamp or overlapping intervals). Failure kinds clear after the next successful fetch. Existing keys are unchanged. This does not verify the live Nord Pool contract.
+
 ## Common problems
 
 ### No temperature is shown

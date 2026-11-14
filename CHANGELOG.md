@@ -18,6 +18,10 @@ Assistant instance.
 
 ### Added
 
+- Downloadable diagnostics v2: price cache freshness (last success, today/
+  tomorrow cached, next retry) and coarse failure kinds; overlapping Nord Pool
+  intervals are now rejected before caching. Synthetic 15-minute, hourly and
+  Stockholm DST fixtures extend the service tests (#2).
 - HACS repository metadata (`hacs.json`), hassfest-conformant `manifest.json`
   key order, a validation workflow, and release/status documentation.
 

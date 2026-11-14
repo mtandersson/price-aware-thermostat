@@ -20,6 +20,29 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
+FAILURE_SERVICE_ERROR = "service_error"
+FAILURE_INVALID_RESPONSE = "invalid_response"
+FAILURE_AREA_MISSING = "area_missing"
+FAILURE_NO_PRICES = "no_prices"
+
+
+class PriceFetchError(ValueError):
+    """A price fetch failed for a coarse, privacy-safe reason."""
+
+    def __init__(self, kind: str, message: str) -> None:
+        super().__init__(message)
+        self.kind = kind
+
+
+def _failure_kind(exc: Exception) -> str:
+    """Map an exception to a coarse failure kind without exposing its text."""
+    if isinstance(exc, PriceFetchError):
+        return exc.kind
+    if isinstance(exc, HomeAssistantError):
+        return FAILURE_SERVICE_ERROR
+    return FAILURE_INVALID_RESPONSE
+
+
 class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]]):
     """Cache calendar-day prices and make inexpensive periodic refresh checks.
 
@@ -42,6 +65,48 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
         self._today_retry_after: datetime | None = None
         self._today_retry_date: date | None = None
         self._today_prices_unavailable = False
+        self._last_success: datetime | None = None
+        self._today_failure: str | None = None
+        self._tomorrow_failure: str | None = None
+
+    @property
+    def last_success(self) -> datetime | None:
+        """When prices were last fetched successfully."""
+        return self._last_success
+
+    @property
+    def today_failure(self) -> str | None:
+        """Coarse failure kind of the latest current-day fetch, if it failed."""
+        return self._today_failure
+
+    @property
+    def tomorrow_failure(self) -> str | None:
+        """Coarse failure kind of the latest next-day fetch, if it failed."""
+        return self._tomorrow_failure
+
+    @property
+    def today_retry_after(self) -> datetime | None:
+        """Earliest next current-day attempt while today's prices are missing."""
+        if self.today_cached:
+            return None
+        return self._today_retry_after
+
+    @property
+    def tomorrow_retry_after(self) -> datetime | None:
+        """Earliest next next-day attempt while tomorrow's prices are missing."""
+        if self.tomorrow_cached:
+            return None
+        return self._tomorrow_retry_after
+
+    @property
+    def today_cached(self) -> bool:
+        """Whether the local current day's prices are cached."""
+        return dt_util.now().date() in self._by_day
+
+    @property
+    def tomorrow_cached(self) -> bool:
+        """Whether the next local day's prices are cached."""
+        return dt_util.now().date() + timedelta(days=1) in self._by_day
 
     async def _fetch_day(self, day: date) -> tuple[PriceInterval, ...]:
         """Call the official action with an explicit SEK currency."""
@@ -58,11 +123,25 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
             return_response=True,
         )
         if not isinstance(response, dict):
-            raise ValueError("Nord Pool returned an invalid response")
+            raise PriceFetchError(
+                FAILURE_INVALID_RESPONSE, "Nord Pool returned an invalid response"
+            )
+        if self._area not in response:
+            raise PriceFetchError(
+                FAILURE_AREA_MISSING, "Nord Pool response lacks the configured area"
+            )
         records = normalize_nordpool_response(response, self._area)
         if not records:
-            raise ValueError(f"No Nord Pool prices for {day.isoformat()}")
-        return tuple(records)
+            raise PriceFetchError(
+                FAILURE_NO_PRICES, f"No Nord Pool prices for {day.isoformat()}"
+            )
+        ordered = sorted(records, key=lambda interval: interval.start)
+        for earlier, later in zip(ordered, ordered[1:], strict=False):
+            if earlier.end > later.start:
+                raise PriceFetchError(
+                    FAILURE_INVALID_RESPONSE, "Nord Pool returned overlapping intervals"
+                )
+        return tuple(ordered)
 
     async def _async_update_data(self) -> tuple[PriceInterval, ...]:
         """Refresh only missing calendar days and publish cached prices."""
@@ -86,6 +165,7 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
             try:
                 self._by_day[today] = await self._fetch_day(today)
             except (HomeAssistantError, ValueError, LookupError) as exc:
+                self._today_failure = _failure_kind(exc)
                 if not self._today_prices_unavailable:
                     _LOGGER.warning(
                         "Nord Pool prices unavailable; using the base temperature: %s",
@@ -93,6 +173,8 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
                     )
                     self._today_prices_unavailable = True
             else:
+                self._today_failure = None
+                self._last_success = local_now
                 if self._today_prices_unavailable:
                     _LOGGER.info("Nord Pool price data available again")
                     self._today_prices_unavailable = False
@@ -110,7 +192,11 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
             try:
                 self._by_day[tomorrow] = await self._fetch_day(tomorrow)
             except (HomeAssistantError, ValueError, LookupError) as exc:
+                self._tomorrow_failure = _failure_kind(exc)
                 _LOGGER.debug("Tomorrow's Nord Pool prices are not yet available: %s", exc)
+            else:
+                self._tomorrow_failure = None
+                self._last_success = local_now
 
         return tuple(
             sorted(

@@ -41,7 +41,7 @@ and rollback procedures, and the pending license decision are in
 - Bounded temperatures, price deadband, heating hysteresis and a minimum relay cycle duration.
 - Configurable maximum age for temperature sensor reports (default: 60 minutes). Stale or unavailable readings disable automatic heat demand; independent hardware frost protection remains essential.
 - Price-aware or fixed-temperature presets and explicit heat/off modes.
-- UI-based setup and options flow, English UI strings, and diagnostics in climate attributes.
+- UI-based setup and options flow, English UI strings, diagnostics in climate attributes, and downloadable diagnostics with price-cache freshness and failure kinds.
 - A default **read-only shadow mode** for side-by-side evaluation before commissioning.
 
 ## Development installation

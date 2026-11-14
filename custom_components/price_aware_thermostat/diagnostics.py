@@ -7,6 +7,7 @@ exact room temperatures, device names, and arbitrary options dictionaries.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -24,6 +25,11 @@ from .const import (
 from .coordinator import NordPoolPriceCoordinator
 
 
+def _iso(value: datetime | None) -> str | None:
+    """Format a timestamp as UTC ISO 8601, or None when unset."""
+    return value.astimezone(UTC).isoformat() if value is not None else None
+
+
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: PriceAwareConfigEntry
 ) -> dict[str, Any]:
@@ -37,7 +43,7 @@ async def async_get_config_entry_diagnostics(
         None,
     )
     return {
-        "version": 1,
+        "version": 2,
         "configuration": {
             "shadow_mode": bool(settings.get(CONF_SHADOW, True)),
             "market_area": str(settings.get(CONF_AREA, "")),
@@ -65,5 +71,14 @@ async def async_get_config_entry_diagnostics(
         },
         "status": {
             "last_refresh_success": coordinator.last_update_success,
+        },
+        "price_freshness": {
+            "last_success_utc": _iso(coordinator.last_success),
+            "today_cached": coordinator.today_cached,
+            "tomorrow_cached": coordinator.tomorrow_cached,
+            "today_failure": coordinator.today_failure,
+            "tomorrow_failure": coordinator.tomorrow_failure,
+            "today_retry_after_utc": _iso(coordinator.today_retry_after),
+            "tomorrow_retry_after_utc": _iso(coordinator.tomorrow_retry_after),
         },
     }
