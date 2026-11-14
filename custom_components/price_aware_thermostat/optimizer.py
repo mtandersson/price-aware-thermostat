@@ -75,9 +75,12 @@ class OptimizerConfig:
         if self.hvac_mode not in ("heat", "cool"):
             raise ValueError("Unknown HVAC mode")
         if self.max_deviation_c is not None and (
-            not isfinite(self.max_deviation_c) or self.max_deviation_c < 0
+            isinstance(self.max_deviation_c, bool)
+            or not isinstance(self.max_deviation_c, (int, float))
+            or not isfinite(self.max_deviation_c)
+            or self.max_deviation_c < 0
         ):
-            raise ValueError("Maximum deviation must be finite and not negative")
+            raise ValueError("Maximum deviation must be a finite number, not negative")
 
     @property
     def lower_bound(self) -> float:
@@ -229,7 +232,8 @@ def optimize(
     # A cheaper present than future favours storing heat (higher target) or
     # cold (lower target); the sign for cooling is therefore reversed.
     direction = 1.0 if config.hvac_mode == "heat" else -1.0
-    adjustment = direction * config.sensitivity_c_per_sek_per_kwh * adjusted_delta
+    # `+ 0.0` normalises a negative zero so diagnostics never show -0.0.
+    adjustment = direction * config.sensitivity_c_per_sek_per_kwh * adjusted_delta + 0.0
     raw_target = config.base_temperature + adjustment
     target = min(config.upper_bound, max(config.lower_bound, raw_target))
     reason: Reason

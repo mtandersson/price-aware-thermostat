@@ -53,9 +53,9 @@ class HeatCoolTests(unittest.TestCase):
         heat = optimize(self.now, prices, self.heat)
         cool = optimize(self.now, prices, self.cool)
         self.assertEqual("expensive", heat.reason)
-        self.assertLess(heat.effective_target_c, 21)
+        self.assertAlmostEqual(20.55, heat.effective_target_c)
         self.assertEqual("expensive", cool.reason)
-        self.assertGreater(cool.effective_target_c, 21)
+        self.assertAlmostEqual(21.45, cool.effective_target_c)
 
     def test_adjustments_are_mirror_images(self):
         prices = intervals([0.3, 0.9, 0.9, 0.9, 0.9])
@@ -71,6 +71,8 @@ class HeatCoolTests(unittest.TestCase):
                 result = optimize(self.now, intervals(prices), cfg)
                 self.assertEqual("normal", result.reason)
                 self.assertEqual(21, result.effective_target_c)
+                self.assertEqual(0.0, result.requested_adjustment_c)
+                self.assertEqual("0.0", str(result.requested_adjustment_c))
                 self.assertFalse(result.clamped)
 
     def test_comfort_limits_clamp_and_are_reported(self):
@@ -157,20 +159,83 @@ class HeatCoolTests(unittest.TestCase):
 
     def test_default_mode_is_unchanged_heating(self):
         legacy = OptimizerConfig(
-            base_temperature=6, minimum_temperature=5.3, maximum_temperature=7.5,
-            lookahead_minutes=60, deadband_sek_per_kwh=0.1, sensitivity_c_per_sek_per_kwh=2.0,
+            base_temperature=21, minimum_temperature=19, maximum_temperature=24,
+            lookahead_minutes=60, deadband_sek_per_kwh=0.1, sensitivity_c_per_sek_per_kwh=0.5,
         )
         self.assertEqual("heat", legacy.hvac_mode)
-        result = optimize(self.now, intervals([0.1, 1, 1, 1, 1]), legacy)
-        self.assertEqual("preheat", result.reason)
-        self.assertEqual(7.5, result.effective_target_c)
+        self.assertIsNone(legacy.max_deviation_c)
+        prices = intervals([0.2, 1.2, 1.2, 1.2, 1.2])
+        # Unclamped result identical to an explicitly heating configuration.
+        self.assertEqual(optimize(self.now, prices, legacy), optimize(self.now, prices, self.heat))
+        self.assertAlmostEqual(21.45, optimize(self.now, prices, legacy).effective_target_c)
+
+    def test_unclamped_adjustment_is_reported_numerically(self):
+        prices = intervals([0.2, 1.2, 1.2, 1.2, 1.2])
+        heat = optimize(self.now, prices, self.heat)
+        cool = optimize(self.now, prices, self.cool)
+        self.assertAlmostEqual(0.45, heat.requested_adjustment_c)
+        self.assertAlmostEqual(-0.45, cool.requested_adjustment_c)
+        self.assertFalse(heat.clamped)
+        self.assertFalse(cool.clamped)
+
+    def test_deviation_larger_than_comfort_range_defers_to_absolute_bounds(self):
+        wide = replace(self.heat, max_deviation_c=10)
+        result = optimize(self.now, intervals([0.0, 9.0, 9.0, 9.0, 9.0]), wide)
+        self.assertEqual(24, result.effective_target_c)
+        self.assertTrue(result.clamped)
+
+    def test_zero_deviation_pins_the_base_target(self):
+        for cfg in (replace(self.heat, max_deviation_c=0), replace(self.cool, max_deviation_c=0)):
+            result = optimize(self.now, intervals([0.0, 9.0, 9.0, 9.0, 9.0]), cfg)
+            self.assertEqual(21, result.effective_target_c)
+            self.assertEqual("normal", result.reason)
+            self.assertTrue(result.clamped)
+
+    def test_deviation_and_absolute_bound_interact(self):
+        cfg = replace(self.heat, base_temperature=23.8, max_deviation_c=0.5)
+        result = optimize(self.now, intervals([0.0, 9.0, 9.0, 9.0, 9.0]), cfg)
+        # The absolute maximum (24) is tighter than base + deviation (24.3).
+        self.assertAlmostEqual(24.0, result.effective_target_c)
+        self.assertTrue(result.clamped)
+
+    def test_deadband_boundary_gives_no_adjustment_and_just_above_does(self):
+        at_edge = optimize(self.now, intervals([0.5, 0.6, 0.6, 0.6, 0.6]), self.heat)
+        above = optimize(self.now, intervals([0.5, 0.7, 0.7, 0.7, 0.7]), self.heat)
+        self.assertEqual(21, at_edge.effective_target_c)
+        self.assertGreater(above.effective_target_c, 21)
+
+    def test_rectangle_filter_and_sign_crossing_prices(self):
+        for cfg, reason in ((self.heat, "preheat"), (self.cool, "precool")):
+            result = optimize(
+                self.now,
+                intervals([-0.3, 0.9, 0.9, 0.9, 0.9]),
+                replace(cfg, filter_type="rectangle"),
+            )
+            self.assertEqual(reason, result.reason)
+
+    def test_dst_transition_day_uses_real_elapsed_time(self):
+        from zoneinfo import ZoneInfo
+
+        # Europe/Stockholm leaves DST on 2026-10-25: 02:00-03:00 occurs twice.
+        zone = ZoneInfo("Europe/Stockholm")
+        start = datetime(2026, 10, 25, 0, 0, tzinfo=zone)
+        prices = [
+            PriceInterval(
+                start.astimezone(UTC) + timedelta(hours=i),
+                start.astimezone(UTC) + timedelta(hours=i + 1),
+                0.2 if i == 0 else 1.2,
+            )
+            for i in range(6)
+        ]
+        now = start.astimezone(UTC) + timedelta(minutes=10)
+        self.assertEqual("preheat", optimize(now, prices, self.heat).reason)
 
     def test_invalid_parameters_are_rejected(self):
         with self.assertRaises(ValueError):
             replace(self.heat, hvac_mode="auto")  # type: ignore[arg-type]
-        for bad in (-0.1, float("nan"), float("inf")):
+        for bad in (-0.1, float("nan"), float("inf"), True, "1"):
             with self.assertRaises(ValueError):
-                replace(self.heat, max_deviation_c=bad)
+                replace(self.heat, max_deviation_c=bad)  # type: ignore[arg-type]
 
 
 if __name__ == "__main__":
