@@ -14,7 +14,8 @@ compensation, a minimum restart pause, safe heat/cool changeover and optional
 window/door pauses. Both types start in shadow mode, which sends no commands.
 Live AC control is new and has not been validated on real equipment; do not use
 it to replace a working controller without the staging steps in the guides.
-See [control types and backend contract](docs/control-types.md).
+See [control types and backend contract](docs/control-types.md) and, for the
+AC type, [evaluation, compatibility and migration](docs/ac-evaluation-and-migration.md).
 A synthetic, simulation-only [optimizer benchmark](docs/benchmark.md) is also available; it does not measure real savings.
 
 ## HACS (not yet available)

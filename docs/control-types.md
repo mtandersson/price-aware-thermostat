@@ -129,6 +129,14 @@ The wrapper owns only the commands above. Fan speed, swing, presets, humidity,
 auto/dry modes and other device controls stay with the backend and are not part
 of this controller.
 
+### Removal and shutdown send no command
+
+Unloading the entry, removing it, reloading options or stopping Home Assistant
+sends no command to the backend. It stays in its last commanded mode and target,
+so check its actual state afterwards. See
+[evaluation, compatibility and migration](ac-evaluation-and-migration.md) for the
+evaluation procedure, dashboard example, exporter status and rollback steps.
+
 ### Reported mode is not compressor runtime
 
 `backend_reported_hvac_action` is what the backend *says*. The minimum restart
