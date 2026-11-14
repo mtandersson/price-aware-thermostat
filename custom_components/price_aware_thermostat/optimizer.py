@@ -6,10 +6,11 @@ controls a heater. Prices must be supplied as SEK/kWh in UTC-aware intervals.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from math import isfinite
-from typing import Literal, Sequence
+from typing import Literal
 
 Filter = Literal["rectangle", "triangle"]
 
@@ -23,7 +24,7 @@ class PriceInterval:
     def __post_init__(self) -> None:
         if self.start.tzinfo is None or self.end.tzinfo is None:
             raise ValueError("Price intervals require timezone-aware datetimes")
-        if self.end.astimezone(timezone.utc) <= self.start.astimezone(timezone.utc):
+        if self.end.astimezone(UTC) <= self.start.astimezone(UTC):
             raise ValueError("Each price interval must have positive duration")
         if not isfinite(self.price_sek_per_kwh):
             raise ValueError("Price must be finite; negative prices are allowed")
@@ -120,20 +121,20 @@ def optimize(
     """
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
-    utc_now = now.astimezone(timezone.utc)
-    ordered = sorted(prices, key=lambda p: p.start.astimezone(timezone.utc))
-    for previous, following in zip(ordered, ordered[1:]):
-        if previous.end.astimezone(timezone.utc) > following.start.astimezone(timezone.utc):
+    utc_now = now.astimezone(UTC)
+    ordered = sorted(prices, key=lambda p: p.start.astimezone(UTC))
+    for previous, following in zip(ordered, ordered[1:], strict=False):
+        if previous.end.astimezone(UTC) > following.start.astimezone(UTC):
             raise ValueError("Overlapping price intervals")
 
     current = next(
-        (p for p in ordered if p.start.astimezone(timezone.utc) <= utc_now < p.end.astimezone(timezone.utc)),
+        (p for p in ordered if p.start.astimezone(UTC) <= utc_now < p.end.astimezone(UTC)),
         None,
     )
     if current is None:
         return _fallback(config)
 
-    anchor = current.end.astimezone(timezone.utc)
+    anchor = current.end.astimezone(UTC)
     horizon_seconds = config.lookahead_minutes * 60.0
     horizon_end = anchor + timedelta(minutes=config.lookahead_minutes)
     cursor = anchor
@@ -142,8 +143,8 @@ def optimize(
     coverage_seconds = 0.0
 
     for interval in ordered:
-        start = interval.start.astimezone(timezone.utc)
-        end = interval.end.astimezone(timezone.utc)
+        start = interval.start.astimezone(UTC)
+        end = interval.end.astimezone(UTC)
         if end <= cursor or start >= horizon_end:
             continue
         if start > cursor:
