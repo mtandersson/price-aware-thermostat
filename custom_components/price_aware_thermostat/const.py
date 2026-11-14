@@ -19,6 +19,7 @@ CONF_SENSITIVITY: Final = "sensitivity_c_per_sek_per_kwh"
 CONF_COLD_TOLERANCE: Final = "cold_tolerance"
 CONF_HOT_TOLERANCE: Final = "hot_tolerance"
 CONF_MIN_CYCLE: Final = "min_cycle_seconds"
+CONF_MAX_SENSOR_AGE: Final = "max_sensor_age_minutes"
 CONF_SHADOW: Final = "shadow_mode"
 CONF_SAFETY_ACK: Final = "safety_acknowledged"
 
@@ -33,5 +34,6 @@ DEFAULTS: Final[dict[str, float | int | str | bool]] = {
     CONF_COLD_TOLERANCE: 0.3,
     CONF_HOT_TOLERANCE: 0.3,
     CONF_MIN_CYCLE: 300,
+    CONF_MAX_SENSOR_AGE: 60,
     CONF_SHADOW: True,
 }
