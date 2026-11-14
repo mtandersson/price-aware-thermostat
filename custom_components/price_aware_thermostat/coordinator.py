@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime, timedelta
 
-from homeassistant.config_entries import ConfigEntry
+from typing import TYPE_CHECKING
+
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -13,6 +14,9 @@ from homeassistant.util import dt as dt_util
 
 from .const import CONF_AREA, CONF_NORDPOOL_ENTRY
 from .optimizer import PriceInterval, normalize_nordpool_response
+
+if TYPE_CHECKING:
+    from .config_entry import PriceAwareConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,7 +28,7 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
     tomorrow start after 13:00 local time. Errors do not disable the thermostat.
     """
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    def __init__(self, hass: HomeAssistant, entry: PriceAwareConfigEntry) -> None:
         """Initialize the coordinator."""
         super().__init__(
             hass,
