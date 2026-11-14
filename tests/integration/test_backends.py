@@ -142,11 +142,13 @@ async def test_duplicate_and_recursive_backends_rejected(hass: HomeAssistant) ->
     ) == "recursive_backend"
 
 
-async def test_climate_preview_never_dispatches_and_restores_target(hass: HomeAssistant) -> None:
+async def test_climate_shadow_entry_never_dispatches_and_restores_target(
+    hass: HomeAssistant,
+) -> None:
     entities(hass)
     entry = MockConfigEntry(
         domain=DOMAIN, version=2, title="Room AC", data=settings(),
-        options={CONF_SHADOW: False, CONF_BASE_TEMP: 23},
+        options={CONF_SHADOW: True, CONF_BASE_TEMP: 23},
     )
     entry.add_to_hass(hass)
     calls = [async_mock_service(hass, domain, service) for domain, service in [
@@ -163,12 +165,13 @@ async def test_climate_preview_never_dispatches_and_restores_target(hass: HomeAs
         state = hass.states.get("climate.room_ac")
         assert state
         assert state.state == "off"
-        assert state.attributes["hvac_modes"] == ["off"]
+        assert state.attributes["hvac_modes"] == ["heat", "cool", "off"]
         assert state.attributes["temperature"] == 23
         assert state.attributes["current_temperature"] == 21
         assert state.attributes["shadow_mode"] is True
+        assert state.attributes["live_control_supported"] is True
         assert state.attributes["native_target_c"] is None
-        assert state.attributes["optimization_reason"] == "climate_backend_not_implemented"
+        assert state.attributes["optimization_reason"] == "off"
         await hass.services.async_call("climate", "set_temperature", {
             "entity_id": "climate.room_ac", "temperature": 24,
         }, blocking=True)
@@ -185,20 +188,71 @@ async def test_climate_preview_never_dispatches_and_restores_target(hass: HomeAs
         assert not any(call.data.get("entity_id") == "climate.pump" for group in calls for call in group)
 
 
-async def test_climate_options_cannot_enable_live_control(hass: HomeAssistant) -> None:
+def live_options(**extra: object) -> dict[str, object]:
+    return {
+        **DEFAULTS, CONF_BASE_TEMP: 22, CONF_MIN_TEMP: 18, CONF_MAX_TEMP: 26,
+        CONF_HEATER: "climate.pump", CONF_SENSOR: "sensor.room",
+        CONF_HVAC_MODES: ["heat", "cool"], CONF_SHADOW: False, **extra,
+    }
+
+
+async def test_climate_live_control_requires_safety_confirmation(hass: HomeAssistant) -> None:
     entities(hass)
     entry = MockConfigEntry(domain=DOMAIN, version=2, data=settings(), options={CONF_SHADOW: True})
     entry.add_to_hass(hass)
     flow = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(flow["flow_id"], {
-        **DEFAULTS, CONF_BASE_TEMP: 22, CONF_MIN_TEMP: 18, CONF_MAX_TEMP: 26,
-        CONF_HEATER: "climate.pump", CONF_SENSOR: "sensor.room",
-        CONF_HVAC_MODES: ["heat", "cool"],
-        CONF_SHADOW: False, "safety_acknowledged": True,
-    })
+    result = await hass.config_entries.options.async_configure(flow["flow_id"], live_options())
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"]["base"] == "climate_live_not_supported"
+    assert result["errors"]["base"] == "safety_confirmation_required"
     assert entry.options[CONF_SHADOW] is True
+
+
+async def test_climate_live_control_can_be_enabled_after_confirmation(hass: HomeAssistant) -> None:
+    entities(hass)
+    entry = MockConfigEntry(domain=DOMAIN, version=2, data=settings(), options={CONF_SHADOW: True})
+    entry.add_to_hass(hass)
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        flow["flow_id"], live_options(safety_acknowledged=True)
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_SHADOW] is False
+    assert "safety_acknowledged" not in result["data"]
+
+
+@pytest.mark.parametrize(("changes", "error"), [
+    ({"heat_compensation": 11}, "invalid_ac_settings"),
+    ({"cool_compensation": -10.5}, "invalid_ac_settings"),
+    ({"window_open_delay_seconds": -1}, "invalid_ac_settings"),
+    ({"window_close_delay_seconds": 4000}, "invalid_ac_settings"),
+    ({"maximum_price_deviation": -0.1}, "invalid_ac_settings"),
+    ({"maximum_price_deviation": float("nan")}, "invalid_ac_settings"),
+    ({"window_contacts": ["sensor.not_a_contact"]}, "invalid_window_sensor"),
+    ({"window_contacts": "binary_sensor.window"}, "invalid_window_sensor"),
+])
+async def test_ac_only_settings_are_validated(
+    hass: HomeAssistant, changes: dict[str, object], error: str
+) -> None:
+    entities(hass)
+    assert validate_backend(hass, {**settings(), **changes}) == error
+
+
+async def test_optional_ac_settings_can_be_cleared_in_options(hass: HomeAssistant) -> None:
+    entities(hass)
+    entry = MockConfigEntry(
+        domain=DOMAIN, version=2,
+        data={**settings(), "maximum_price_deviation": 0.5,
+              "window_contacts": ["binary_sensor.window"]},
+        options={CONF_SHADOW: True},
+    )
+    entry.add_to_hass(hass)
+    flow = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        flow["flow_id"], live_options(**{CONF_SHADOW: True})
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"]["maximum_price_deviation"] is None
+    assert result["data"]["window_contacts"] == []
 
 
 async def test_climate_options_retarget_preserves_existing_settings(hass: HomeAssistant) -> None:

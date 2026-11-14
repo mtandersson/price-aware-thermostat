@@ -7,7 +7,7 @@ import logging
 import time
 from datetime import timedelta
 from math import isfinite
-from typing import Any
+from typing import Any, Literal
 
 from homeassistant.components.climate import (
     ATTR_TEMPERATURE,
@@ -29,15 +29,32 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
 from homeassistant.util import dt as dt_util
 
+from .ac_control import (
+    AcMode,
+    BackendLimits,
+    Command,
+    CommandMemory,
+    Intent,
+    Observation,
+    Plan,
+    WindowGuard,
+    aggregate_contacts,
+    demand,
+    native_target,
+    plan_next_command,
+)
 from .backends import backend_from_settings
 from .config_entry import PriceAwareConfigEntry
 from .const import (
     CONF_BASE_TEMP,
     CONF_COLD_TOLERANCE,
+    CONF_COOL_COMPENSATION,
     CONF_DEADBAND,
     CONF_FILTER,
+    CONF_HEAT_COMPENSATION,
     CONF_HOT_TOLERANCE,
     CONF_LOOKAHEAD,
+    CONF_MAX_DEVIATION,
     CONF_MAX_SENSOR_AGE,
     CONF_MAX_TEMP,
     CONF_MIN_CYCLE,
@@ -45,6 +62,9 @@ from .const import (
     CONF_SENSITIVITY,
     CONF_SENSOR,
     CONF_SHADOW,
+    CONF_WINDOW_CLOSE_DELAY,
+    CONF_WINDOW_OPEN_DELAY,
+    CONF_WINDOW_SENSORS,
     CONTROL_CLIMATE,
     DEFAULTS,
 )
@@ -66,6 +86,11 @@ PRESET_FIXED = "fixed"
 PARALLEL_UPDATES = 1
 
 
+def _monotonic() -> float:
+    """Clock for restart pauses, window delays and retries (patched in tests)."""
+    return time.monotonic()
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: PriceAwareConfigEntry,
@@ -74,7 +99,9 @@ async def async_setup_entry(
     """Register one climate entity per integration entry."""
     coordinator: NordPoolPriceCoordinator = entry.runtime_data
     backend = backend_from_settings({**entry.data, **entry.options})
-    entity_class = ClimateBackendPreview if backend.kind == CONTROL_CLIMATE else PriceAwareThermostat
+    entity_class = (
+        ClimateBackendThermostat if backend.kind == CONTROL_CLIMATE else PriceAwareThermostat
+    )
     async_add_entities([entity_class(entry, coordinator)])
 
 
@@ -160,8 +187,59 @@ class PriceAwareThermostat(RestoreClimate):
             sensitivity_c_per_sek_per_kwh=float(
                 settings.get(CONF_SENSITIVITY, DEFAULTS[CONF_SENSITIVITY])
             ),
+            hvac_mode=self._optimizer_mode(),
+            max_deviation_c=self._max_deviation(),
         )
         return optimize(dt_util.utcnow(), self._coordinator.data or (), config)
+
+    def _optimizer_mode(self) -> Literal["heat", "cool"]:
+        """Price-adjustment direction; the switch controller only heats."""
+        return "heat"
+
+    def _max_deviation(self) -> float | None:
+        """Optional deviation limit around the base target (none for the switch type)."""
+        return None
+
+    def _safe_calculate(self) -> OptimizationResult:
+        """Calculate the price-adjusted target, falling back to the base target."""
+        try:
+            return self._calculate()
+        except ValueError:
+            _LOGGER.warning("Invalid price data; using the configured base temperature")
+            return OptimizationResult(
+                effective_target_c=self._base_target,
+                reason="price_unavailable",
+                current_price_sek_per_kwh=None,
+                future_weighted_price_sek_per_kwh=None,
+                price_difference_sek_per_kwh=None,
+                future_coverage_fraction=0.0,
+            )
+
+    def _read_temperature(self) -> None:
+        """Read the room sensor; stale, unavailable or invalid readings become None."""
+        temp_state = self.hass.states.get(self._sensor)
+        self._attr_native_current_temperature = None
+        self._sensor_fresh = temp_state is not None and is_temperature_sample_fresh(
+            getattr(temp_state, "last_reported", None),
+            dt_util.utcnow(),
+            self._max_sensor_age,
+        )
+        if (
+            self._sensor_fresh
+            and temp_state is not None
+            and temp_state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE)
+        ):
+            unit = temp_state.attributes.get("unit_of_measurement")
+            self._attr_native_current_temperature = parse_temperature_celsius(
+                temp_state.state, unit if isinstance(unit, str) else None
+            )
+        self._sensor_fresh = (
+            self._sensor_fresh and self._attr_native_current_temperature is not None
+        )
+
+    def _tracked_entities(self) -> list[str]:
+        """Entities whose state changes trigger a re-evaluation."""
+        return [self._sensor, self._heater]
 
     @property
     def extra_state_attributes(self) -> dict[str, str | float | bool | None]:
@@ -242,15 +320,15 @@ class PriceAwareThermostat(RestoreClimate):
         await super().async_added_to_hass()
         old = await self.async_get_last_state()
         if old is not None:
-            if old.state == HVACMode.OFF:
-                self._attr_hvac_mode = HVACMode.OFF
+            if old.state in {str(mode) for mode in self._attr_hvac_modes}:
+                self._attr_hvac_mode = HVACMode(old.state)
             if old.attributes.get("preset_mode") == PRESET_FIXED:
                 self._attr_preset_mode = PRESET_FIXED
 
         self.async_on_remove(self._cancel_evaluation_task)
         self.async_on_remove(
             async_track_state_change_event(
-                self.hass, [self._sensor, self._heater], self._state_changed
+                self.hass, self._tracked_entities(), self._state_changed
             )
         )
         self.async_on_remove(
@@ -271,41 +349,9 @@ class PriceAwareThermostat(RestoreClimate):
                 self._planned_heating,
                 self._sensor_fresh,
             )
-            temp_state = self.hass.states.get(self._sensor)
             heater_state = self.hass.states.get(self._heater)
-            self._attr_native_current_temperature = None
-            self._sensor_fresh = (
-                temp_state is not None
-                and is_temperature_sample_fresh(
-                    getattr(temp_state, "last_reported", None),
-                    dt_util.utcnow(),
-                    self._max_sensor_age,
-                )
-            )
-            if self._sensor_fresh and temp_state is not None and temp_state.state not in (
-                STATE_UNKNOWN,
-                STATE_UNAVAILABLE,
-            ):
-                unit = temp_state.attributes.get("unit_of_measurement")
-                self._attr_native_current_temperature = parse_temperature_celsius(
-                    temp_state.state, unit if isinstance(unit, str) else None
-                )
-            self._sensor_fresh = (
-                self._sensor_fresh and self._attr_native_current_temperature is not None
-            )
-
-            try:
-                self._last_result = self._calculate()
-            except ValueError:
-                _LOGGER.warning("Invalid price data; using the configured base temperature")
-                self._last_result = OptimizationResult(
-                    effective_target_c=self._base_target,
-                    reason="price_unavailable",
-                    current_price_sek_per_kwh=None,
-                    future_weighted_price_sek_per_kwh=None,
-                    price_difference_sek_per_kwh=None,
-                    future_coverage_fraction=0.0,
-                )
+            self._read_temperature()
+            self._last_result = self._safe_calculate()
             effective_target = (
                 self._last_result.effective_target_c
                 if self._attr_preset_mode == PRESET_PRICE_AWARE
@@ -412,50 +458,277 @@ class PriceAwareThermostat(RestoreClimate):
         self.async_write_ha_state()
 
 
-class ClimateBackendPreview(PriceAwareThermostat):
-    """Configuration-only climate backend; no AC commands or pricing yet.
+class ClimateBackendThermostat(PriceAwareThermostat):
+    """Regulate a room from an external sensor by commanding a heat pump/AC climate.
 
-    The relay implementation remains unchanged. AC demand, native target mapping
-    and cooling-aware pricing are deliberately deferred to issues #21/#23.
+    The room sensor is the demand source. The wrapper sends HVAC-mode and
+    temperature commands to the underlying climate; it never toggles an
+    electrical relay. While live it is the authoritative writer for that
+    backend. In shadow mode the same plan is computed and exposed, but no
+    service is ever called.
     """
-
-    _attr_hvac_modes = [HVACMode.OFF]
 
     def __init__(
         self, entry: PriceAwareConfigEntry, coordinator: NordPoolPriceCoordinator
     ) -> None:
         super().__init__(entry, coordinator)
-        self._shadow = True
+        settings = {**entry.data, **entry.options}
+        # A fresh wrapper starts off; a restored explicit choice may replace it.
         self._attr_hvac_mode = HVACMode.OFF
+        self._windows = tuple(str(c) for c in settings.get(CONF_WINDOW_SENSORS, []) or [])
+        self._window_guard = WindowGuard(
+            open_delay=float(
+                settings.get(CONF_WINDOW_OPEN_DELAY, DEFAULTS[CONF_WINDOW_OPEN_DELAY])
+            ),
+            close_delay=float(
+                settings.get(CONF_WINDOW_CLOSE_DELAY, DEFAULTS[CONF_WINDOW_CLOSE_DELAY])
+            ),
+        )
+        # Restart protection: the pause counts from the first observed off state.
+        self._memory = CommandMemory(off_since=_monotonic())
+        self._demand_active = False
+        self._first_evaluation = True
+        self._intent = Intent("off", None, "startup")
+        self._plan = Plan(None, "startup")
+        self._observed = Observation(False)
+        self._in_sync = False
+        self._window_status = "not_configured"
+        self._reported_action: HVACAction | None = None
+
+    # -- hooks used by the shared optimizer code -------------------------------
+    def _optimizer_mode(self) -> Literal["heat", "cool"]:
+        return "cool" if self._attr_hvac_mode == HVACMode.COOL else "heat"
+
+    def _max_deviation(self) -> float | None:
+        value = {**self._entry.data, **self._entry.options}.get(CONF_MAX_DEVIATION)
+        return None if value is None else float(value)
+
+    def _tracked_entities(self) -> list[str]:
+        return [self._sensor, self._heater, *self._windows]
+
+    # -- observation -----------------------------------------------------------
+    def _observe(self) -> tuple[Observation, BackendLimits | None]:
+        """Read what the underlying climate reports; never assume a command worked."""
+        state = self.hass.states.get(self._heater)
+        if state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            self._reported_action = None
+            return Observation(False), None
+        attrs = state.attributes
+        modes = attrs.get("hvac_modes")
+        supported = tuple(str(m) for m in modes) if isinstance(modes, (list, tuple)) else ()
+        target: float | None
+        try:
+            target = float(attrs["temperature"])
+            target = target if isfinite(target) else None
+        except (KeyError, TypeError, ValueError):
+            target = None
+        try:
+            limits: BackendLimits | None = BackendLimits(
+                float(attrs["min_temp"]),
+                float(attrs["max_temp"]),
+                float(attrs.get("target_temp_step", 1.0)),
+            )
+        except (KeyError, TypeError, ValueError):
+            limits = None
+        try:
+            self._reported_action = HVACAction(str(attrs.get("hvac_action")))
+        except ValueError:
+            self._reported_action = None
+        return Observation(True, state.state, target, supported), limits
+
+    def _window_reading(self) -> bool | None:
+        readings: list[bool | None] = []
+        for entity_id in self._windows:
+            state = self.hass.states.get(entity_id)
+            if state is not None and state.state == STATE_ON:
+                readings.append(True)
+            elif state is not None and state.state == STATE_OFF:
+                readings.append(False)
+            else:
+                readings.append(None)  # missing/unavailable/unknown contact
+        return aggregate_contacts(readings)
+
+    def _compensation(self, mode: AcMode) -> float:
+        settings = {**self._entry.data, **self._entry.options}
+        key = CONF_COOL_COMPENSATION if mode == "cool" else CONF_HEAT_COMPENSATION
+        return float(settings.get(key, DEFAULTS[key]))
+
+    # -- decision --------------------------------------------------------------
+    def _decide(
+        self, observed: Observation, limits: BackendLimits | None, mono: float
+    ) -> Intent:
+        """Combine mode, windows, sensor health, price and hysteresis into an intent."""
+        reading = self._window_reading()
+        paused = self._window_guard.update(reading, mono) if self._windows else False
+        if not self._windows:
+            self._window_status = "not_configured"
+        elif paused:
+            self._window_status = "open_paused"
+        elif reading is None:
+            self._window_status = "unknown"
+        elif reading:
+            self._window_status = "open_pending"
+        else:
+            self._window_status = "closed"
+
+        mode = self._attr_hvac_mode
+        if mode == HVACMode.OFF:
+            self._demand_active = False
+            return Intent("off", None, "wrapper_off")
+        wanted: AcMode = "cool" if mode == HVACMode.COOL else "heat"
+        if paused:
+            # Reconsideration after closure starts from a fresh hysteresis state.
+            self._demand_active = False
+            return Intent("off", None, "window_open")
+        current = self._attr_native_current_temperature
+        if current is None:
+            self._demand_active = False
+            return Intent("off", None, "room_temperature_unavailable")
+        if self._first_evaluation and observed.mode == wanted:
+            # After a restart a pump already running in this mode keeps its demand.
+            self._demand_active = True
+        effective = (
+            self._last_result.effective_target_c
+            if self._last_result is not None and self._attr_preset_mode == PRESET_PRICE_AWARE
+            else self._base_target
+        )
+        wants = demand(
+            wanted, current, effective, self._demand_active,
+            self._cold_tolerance, self._hot_tolerance,
+        )
+        self._demand_active = bool(wants)
+        if not wants:
+            return Intent("off", None, "no_demand")
+        target: float | None = None
+        if limits is not None:
+            target = native_target(effective, self._compensation(wanted), limits)
+        return Intent(wanted, target, "demand")
+
+    async def _async_dispatch(self, command: Command, mono: float) -> None:
+        """Send one backend command; the observed state, not success, acknowledges it."""
+        # Record before awaiting so failed or interrupted calls are also throttled.
+        self._memory.record(command, mono)
+        data: dict[str, Any] = {"entity_id": self._heater}
+        try:
+            if command.kind == "set_mode":
+                data["hvac_mode"] = command.mode
+                await self.hass.services.async_call(
+                    "climate", "set_hvac_mode", data, blocking=True
+                )
+            else:
+                data["temperature"] = command.target
+                await self.hass.services.async_call(
+                    "climate", "set_temperature", data, blocking=True
+                )
+        except HomeAssistantError:
+            _LOGGER.exception("Could not command the climate backend")
+
+    def _snapshot(self) -> tuple[Any, ...]:
+        return (
+            self._attr_native_current_temperature, self._attr_hvac_action, self._last_result,
+            self._sensor_fresh, self._intent, self._plan.status, self._observed,
+            self._window_status, self._in_sync,
+        )
+
+    async def _async_evaluate(self) -> None:
+        """Evaluate demand and, only when live, reconcile the backend."""
+        async with self._control_lock:
+            previous = self._snapshot()
+            mono = _monotonic()
+            self._read_temperature()
+            self._last_result = self._safe_calculate()
+            observed, limits = self._observe()
+            self._observed = observed
+            intent = self._decide(observed, limits, mono)
+            self._first_evaluation = False
+            self._intent = intent
+            plan = plan_next_command(
+                intent, observed, self._memory, limits, mono, float(self._min_cycle)
+            )
+            self._plan = plan
+            self._in_sync = observed.available and observed.mode == intent.mode and (
+                intent.mode == "off"
+                or (
+                    limits is not None
+                    and observed.target is not None
+                    and intent.native_target is not None
+                    and abs(observed.target - intent.native_target) <= limits.tolerance
+                )
+            )
+            self._attr_hvac_action = (
+                HVACAction.OFF
+                if self._attr_hvac_mode == HVACMode.OFF
+                else self._reported_action
+            )
+            # Shadow mode computes the proposal but calls no climate or switch service.
+            if plan.command is not None and not self._shadow and not self._unloading:
+                await self._async_dispatch(plan.command, mono)
+            if previous != self._snapshot():
+                self.async_write_ha_state()
+
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        """Change the wrapper mode; a changed direction never reuses stale demand."""
+        if hvac_mode in self._attr_hvac_modes and hvac_mode != self._attr_hvac_mode:
+            self._demand_active = False
+        await super().async_set_hvac_mode(hvac_mode)
 
     @property
     def extra_state_attributes(self) -> dict[str, str | float | bool | None]:
+        result = self._last_result
+        active = (
+            result is not None
+            and self._attr_preset_mode == PRESET_PRICE_AWARE
+            and self._attr_hvac_mode != HVACMode.OFF
+        )
+        mode: AcMode = (
+            "cool" if self._attr_hvac_mode == HVACMode.COOL
+            else "heat" if self._attr_hvac_mode == HVACMode.HEAT else "off"
+        )
         return {
             "control_type": self._backend.kind,
             "backend_entity_id": self._backend.entity_id,
             "configured_hvac_modes": ",".join(self._backend.configured_modes),
-            "shadow_mode": True,
-            "live_control_supported": False,
+            "shadow_mode": self._shadow,
+            "live_control_supported": True,
             "temperature_sample_fresh": self._sensor_fresh,
-            "effective_target_c": self._base_target,
-            "native_target_c": None,
-            "optimization_reason": "climate_backend_not_implemented",
+            "base_target_c": self._base_target,
+            "effective_target_c": (
+                result.effective_target_c if result is not None and active else self._base_target
+            ),
+            "price_now_sek_per_kwh": result.current_price_sek_per_kwh if result else None,
+            "weighted_future_price_sek_per_kwh": (
+                result.future_weighted_price_sek_per_kwh if result else None
+            ),
+            "price_difference_sek_per_kwh": (
+                result.price_difference_sek_per_kwh if result else None
+            ),
+            "future_coverage_fraction": result.future_coverage_fraction if result else 0.0,
+            "requested_adjustment_c": result.requested_adjustment_c if result and active else 0.0,
+            "adjustment_clamped": result.clamped if result and active else False,
+            "optimization_reason": (
+                "off" if self._attr_hvac_mode == HVACMode.OFF
+                else "fixed" if self._attr_preset_mode == PRESET_FIXED
+                else result.reason if result else "price_unavailable"
+            ),
+            "proposed_backend_mode": self._intent.mode,
+            "proposed_native_target_c": self._intent.native_target,
+            "native_target_c": self._intent.native_target,
+            "intent_reason": self._intent.reason,
+            "compensation_c": self._compensation(mode) if mode != "off" else None,
+            "observed_backend_mode": self._observed.mode,
+            "observed_native_target_c": self._observed.target,
+            # What the backend reports; not evidence that a compressor is running.
+            "backend_reported_hvac_action": (
+                self._reported_action.value if self._reported_action else None
+            ),
+            "backend_available": self._observed.available,
+            "backend_in_sync": self._in_sync,
+            "command_status": self._plan.status,
+            "pause_reason": (
+                "window_open" if self._window_status == "open_paused"
+                else "restart_pause" if self._plan.status == "restart_pause"
+                else None
+            ),
+            "window_status": self._window_status,
             "planned_heating": None,
         }
-
-    async def _async_evaluate(self) -> None:
-        """Update external temperature only, even for forged live options."""
-        async with self._control_lock:
-            previous = (self._attr_native_current_temperature, self._sensor_fresh)
-            sensor = self.hass.states.get(self._sensor)
-            self._sensor_fresh = sensor is not None and is_temperature_sample_fresh(
-                getattr(sensor, "last_reported", None), dt_util.utcnow(), self._max_sensor_age
-            )
-            self._attr_native_current_temperature = (
-                parse_temperature_celsius(sensor.state, sensor.attributes.get("unit_of_measurement"))
-                if sensor is not None and self._sensor_fresh else None
-            )
-            self._sensor_fresh = self._attr_native_current_temperature is not None
-            self._planned_heating = None
-            if previous != (self._attr_native_current_temperature, self._sensor_fresh):
-                self.async_write_ha_state()

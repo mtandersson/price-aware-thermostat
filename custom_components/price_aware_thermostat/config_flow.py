@@ -20,12 +20,15 @@ from .const import (
     CONF_BASE_TEMP,
     CONF_COLD_TOLERANCE,
     CONF_CONTROL_TYPE,
+    CONF_COOL_COMPENSATION,
     CONF_DEADBAND,
     CONF_FILTER,
+    CONF_HEAT_COMPENSATION,
     CONF_HEATER,
     CONF_HOT_TOLERANCE,
     CONF_HVAC_MODES,
     CONF_LOOKAHEAD,
+    CONF_MAX_DEVIATION,
     CONF_MAX_SENSOR_AGE,
     CONF_MAX_TEMP,
     CONF_MIN_CYCLE,
@@ -36,6 +39,9 @@ from .const import (
     CONF_SENSITIVITY,
     CONF_SENSOR,
     CONF_SHADOW,
+    CONF_WINDOW_CLOSE_DELAY,
+    CONF_WINDOW_OPEN_DELAY,
+    CONF_WINDOW_SENSORS,
     CONTROL_CLIMATE,
     CONTROL_SWITCH,
     DEFAULTS,
@@ -103,6 +109,42 @@ def _settings_schema(initial: dict[str, Any], *, options: bool) -> vol.Schema:
             selector.BooleanSelector()
         )
     return vol.Schema(config)
+
+
+def _ac_schema(initial: dict[str, Any]) -> dict[vol.Marker, Any]:
+    """Settings that only apply to the heat-pump/AC control type."""
+    # Optional, clearable fields use a suggested value (UI prefill) rather than a
+    # default: a default would silently refill a field the user emptied.
+    deviation: vol.Marker = vol.Optional(
+        CONF_MAX_DEVIATION,
+        description={"suggested_value": initial.get(CONF_MAX_DEVIATION)},
+    )
+    windows: vol.Marker = vol.Optional(
+        CONF_WINDOW_SENSORS,
+        description={"suggested_value": initial.get(CONF_WINDOW_SENSORS) or None},
+    )
+    return {
+        vol.Optional(
+            CONF_HEAT_COMPENSATION,
+            default=initial.get(CONF_HEAT_COMPENSATION, DEFAULTS[CONF_HEAT_COMPENSATION]),
+        ): _number(-10, 10, 0.5),
+        vol.Optional(
+            CONF_COOL_COMPENSATION,
+            default=initial.get(CONF_COOL_COMPENSATION, DEFAULTS[CONF_COOL_COMPENSATION]),
+        ): _number(-10, 10, 0.5),
+        deviation: _number(0, 20, 0.1),
+        windows: selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="binary_sensor", multiple=True)
+        ),
+        vol.Optional(
+            CONF_WINDOW_OPEN_DELAY,
+            default=initial.get(CONF_WINDOW_OPEN_DELAY, DEFAULTS[CONF_WINDOW_OPEN_DELAY]),
+        ): _number(0, 3600, 15),
+        vol.Optional(
+            CONF_WINDOW_CLOSE_DELAY,
+            default=initial.get(CONF_WINDOW_CLOSE_DELAY, DEFAULTS[CONF_WINDOW_CLOSE_DELAY]),
+        ): _number(0, 3600, 15),
+    }
 
 
 def _invalid_settings(settings: dict[str, Any]) -> bool:
@@ -175,6 +217,7 @@ class PriceAwareThermostatConfigFlow(ConfigFlow, domain=DOMAIN):
             vol.Required(CONF_AREA, default="SE4"): selector.TextSelector(),
         }
         schema.update(_settings_schema(user_input or {}, options=False).schema)
+        schema.update(_ac_schema(user_input or {}))
         return self.async_show_form(
             step_id="user", data_schema=vol.Schema(schema), errors=errors
         )
@@ -202,8 +245,6 @@ class PriceAwareThermostatOptionsFlow(OptionsFlowWithReload):
             merged = {**values, **user_input}
             if _invalid_settings(merged):
                 errors["base"] = "invalid_temperature_range"
-            elif climate_backend and not merged[CONF_SHADOW]:
-                errors["base"] = "climate_live_not_supported"
             elif not merged[CONF_SHADOW] and not user_input.get(CONF_SAFETY_ACK):
                 errors["base"] = "safety_confirmation_required"
             elif CONF_HEATER in merged and (error := validate_backend(
@@ -223,6 +264,13 @@ class PriceAwareThermostatOptionsFlow(OptionsFlowWithReload):
                 # Retain persisted settings omitted by the form, including base target.
                 updated = {**self.config_entry.options, **user_input}
                 updated.pop(CONF_SAFETY_ACK, None)
+                if climate_backend:
+                    # An omitted optional field means "cleared"; write it explicitly so
+                    # a value saved at setup (in entry data) cannot silently persist.
+                    if CONF_MAX_DEVIATION not in user_input:
+                        updated[CONF_MAX_DEVIATION] = None
+                    if CONF_WINDOW_SENSORS not in user_input:
+                        updated[CONF_WINDOW_SENSORS] = []
                 if updated.get(CONF_HEATER, values.get(CONF_HEATER)) != values.get(CONF_HEATER):
                     # Entry/entity identity remains stable; actuator deduplication
                     # must follow a deliberately changed physical target.
@@ -248,6 +296,7 @@ class PriceAwareThermostatOptionsFlow(OptionsFlowWithReload):
                         selector.SelectSelectorConfig(options=["heat", "cool"], multiple=True)
                     )
                 )
+                schema.update(_ac_schema(values))
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(schema),

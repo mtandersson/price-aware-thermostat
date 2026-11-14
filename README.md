@@ -7,10 +7,13 @@ An experimental Home Assistant custom integration for on/off electric heaters th
 ## Control types
 
 The existing **Element / heating switch** type retains storage-room regulation.
-The new **Heat pump / AC climate** type configures an external room sensor and
-an existing climate backend, but is currently a **shadow-only configuration
-preview**, exposing off mode and an editable base target without actuator
-commands. AC optimization and live control are tracked in #21 and #23.
+The **Heat pump / AC climate** type regulates a room from an external
+temperature sensor by commanding an existing climate entity with HVAC-mode and
+temperature commands, with separate heating and cooling price adjustment and
+compensation, a minimum restart pause, safe heat/cool changeover and optional
+window/door pauses. Both types start in shadow mode, which sends no commands.
+Live AC control is new and has not been validated on real equipment; do not use
+it to replace a working controller without the staging steps in the guides.
 See [control types and backend contract](docs/control-types.md).
 
 ## Features
