@@ -215,6 +215,9 @@ class PriceAwareThermostat(RestoreClimate):
                         self._attr_native_current_temperature = value
                 except ValueError:
                     pass
+            self._sensor_fresh = (
+                self._sensor_fresh and self._attr_native_current_temperature is not None
+            )
 
             try:
                 self._last_result = self._calculate()
