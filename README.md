@@ -35,6 +35,14 @@ It compares the current price to a weighted mean of forecast intervals. The `tri
 
 The normal target temperature displayed in the climate UI is the base setpoint; `effective_target_c` is the price-adjusted setpoint.
 
+## Staging validation, troubleshooting and removal
+
+Before any use with a physical heater, follow the [staging validation and commissioning gates](docs/staging-validation.md), including a disconnected mock relay, official Nord Pool service-action verification, and rollback evidence. Do **not** enable live control on production equipment to collect this evidence.
+
+See [troubleshooting and configuration reference](docs/troubleshooting.md) for complete setup options, expected diagnostics, supported entities, error handling and step-by-step removal from a staging installation.
+
+The first supported release is blocked on a verified official Nord Pool contract and a hardware safety review; see [issue #2](https://github.com/mtandersson/price-aware-thermostat/issues/2), [issue #6](https://github.com/mtandersson/price-aware-thermostat/issues/6) and [quality audit #12](https://github.com/mtandersson/price-aware-thermostat/issues/12).
+
 ## Developer workflow
 
 The pure optimizer and hysteresis tests have no Home Assistant dependency:
