@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timedelta
-
 from typing import TYPE_CHECKING
 
 from homeassistant.core import HomeAssistant
