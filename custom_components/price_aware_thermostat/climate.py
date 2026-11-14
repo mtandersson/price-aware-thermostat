@@ -74,7 +74,7 @@ class PriceAwareThermostat(RestoreClimate):
     _attr_hvac_modes = [HVACMode.HEAT, HVACMode.OFF]
     _attr_preset_modes = [PRESET_PRICE_AWARE, PRESET_FIXED]
     _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_target_temperature_step = 0.1
+    _attr_native_target_temperature_step = 0.1
 
     def __init__(
         self, entry: ConfigEntry, coordinator: NordPoolPriceCoordinator
@@ -97,7 +97,7 @@ class PriceAwareThermostat(RestoreClimate):
         self._attr_name = entry.title
         self._attr_min_temp = float(settings.get(CONF_MIN_TEMP, DEFAULTS[CONF_MIN_TEMP]))
         self._attr_max_temp = float(settings.get(CONF_MAX_TEMP, DEFAULTS[CONF_MAX_TEMP]))
-        self._attr_target_temperature = float(
+        self._attr_native_target_temperature = float(
             settings.get(CONF_BASE_TEMP, DEFAULTS[CONF_BASE_TEMP])
         )
         self._attr_hvac_mode = HVACMode.HEAT
@@ -111,7 +111,7 @@ class PriceAwareThermostat(RestoreClimate):
         """Calculate an effective temperature; errors never actuate a heater."""
         settings = {**self._entry.data, **self._entry.options}
         config = OptimizerConfig(
-            base_temperature=float(self._attr_target_temperature),
+            base_temperature=float(self._attr_native_target_temperature),
             minimum_temperature=self._attr_min_temp,
             maximum_temperature=self._attr_max_temp,
             lookahead_minutes=int(settings.get(CONF_LOOKAHEAD, DEFAULTS[CONF_LOOKAHEAD])),
@@ -132,7 +132,7 @@ class PriceAwareThermostat(RestoreClimate):
         return {
             "shadow_mode": self._shadow,
             "effective_target_c": (
-                result.effective_target_c if result else self._attr_target_temperature
+                result.effective_target_c if result else self._attr_native_target_temperature
             ),
             "price_now_sek_per_kwh": result.current_price_sek_per_kwh if result else None,
             "weighted_future_price_sek_per_kwh": (
@@ -183,21 +183,21 @@ class PriceAwareThermostat(RestoreClimate):
         """Evaluate temperature and synchronize only when live control is enabled."""
         async with self._control_lock:
             previous = (
-                self._attr_current_temperature,
+                self._attr_native_current_temperature,
                 self._attr_hvac_action,
                 self._last_result,
                 self._planned_heating,
             )
             temp_state = self.hass.states.get(self._sensor)
             heater_state = self.hass.states.get(self._heater)
-            self._attr_current_temperature = None
+            self._attr_native_current_temperature = None
             if temp_state is not None and temp_state.state not in (
                 STATE_UNKNOWN, STATE_UNAVAILABLE,
             ):
                 try:
                     value = float(temp_state.state)
                     if isfinite(value):
-                        self._attr_current_temperature = value
+                        self._attr_native_current_temperature = value
                 except ValueError:
                     pass
 
@@ -206,7 +206,7 @@ class PriceAwareThermostat(RestoreClimate):
             except ValueError:
                 _LOGGER.warning("Invalid price data; using the configured base temperature")
                 self._last_result = OptimizationResult(
-                    effective_target_c=float(self._attr_target_temperature),
+                    effective_target_c=float(self._attr_native_target_temperature),
                     reason="price_unavailable",
                     current_price_sek_per_kwh=None,
                     future_weighted_price_sek_per_kwh=None,
@@ -216,7 +216,7 @@ class PriceAwareThermostat(RestoreClimate):
             effective_target = (
                 self._last_result.effective_target_c
                 if self._attr_preset_mode == PRESET_PRICE_AWARE
-                else float(self._attr_target_temperature)
+                else float(self._attr_native_target_temperature)
             )
             currently_on = heater_state is not None and heater_state.state == STATE_ON
             self._attr_hvac_action = (
@@ -226,7 +226,7 @@ class PriceAwareThermostat(RestoreClimate):
                 desired: bool | None = False
             else:
                 desired = desired_heater_state(
-                    self._attr_current_temperature,
+                    self._attr_native_current_temperature,
                     effective_target,
                     currently_on,
                     self._cold_tolerance,
@@ -247,7 +247,7 @@ class PriceAwareThermostat(RestoreClimate):
                 if desired != currently_on:
                     forced_off = (
                         self._attr_hvac_mode == HVACMode.OFF
-                        or self._attr_current_temperature is None
+                        or self._attr_native_current_temperature is None
                     )
                     age = dt_util.utcnow() - heater_state.last_changed
                     if forced_off or age >= timedelta(seconds=self._min_cycle):
@@ -261,7 +261,7 @@ class PriceAwareThermostat(RestoreClimate):
                         except HomeAssistantError:
                             _LOGGER.exception("Could not change the heating relay")
             updated = (
-                self._attr_current_temperature,
+                self._attr_native_current_temperature,
                 self._attr_hvac_action,
                 self._last_result,
                 self._planned_heating,
@@ -277,7 +277,7 @@ class PriceAwareThermostat(RestoreClimate):
         temperature = float(value)
         if not isfinite(temperature) or not self._attr_min_temp <= temperature <= self._attr_max_temp:
             raise HomeAssistantError("Temperature is outside the configured limits")
-        self._attr_target_temperature = temperature
+        self._attr_native_target_temperature = temperature
         # A user-set base target persists over Home Assistant restarts.
         self.hass.config_entries.async_update_entry(
             self._entry,
