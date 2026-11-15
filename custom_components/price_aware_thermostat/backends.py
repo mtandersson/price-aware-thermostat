@@ -13,11 +13,15 @@ from homeassistant.helpers import entity_registry as er
 from .const import (
     CONF_CONTROL_TYPE,
     CONF_COOL_COMPENSATION,
+    CONF_COOL_MIN_OUTDOOR,
     CONF_HEAT_COMPENSATION,
+    CONF_HEAT_MAX_OUTDOOR,
     CONF_HEATER,
     CONF_HVAC_MODES,
     CONF_MAX_DEVIATION,
     CONF_MIN_CYCLE,
+    CONF_OUTDOOR_HYSTERESIS,
+    CONF_OUTDOOR_SENSOR,
     CONF_SENSOR,
     CONF_WINDOW_CLOSE_DELAY,
     CONF_WINDOW_OPEN_DELAY,
@@ -95,6 +99,15 @@ def validate_ac_settings(settings: dict[str, Any]) -> str | None:
         value = number(CONF_MAX_DEVIATION, 0.0)
         if value is None or not 0 <= value <= 20:
             return "invalid_ac_settings"
+    for key in (CONF_COOL_MIN_OUTDOOR, CONF_HEAT_MAX_OUTDOOR):
+        # Empty (None) disables the lockout.
+        if settings.get(key) is not None:
+            value = number(key, 0.0)
+            if value is None or not -40 <= value <= 40:
+                return "invalid_ac_settings"
+    hysteresis = number(CONF_OUTDOOR_HYSTERESIS, 1.0)
+    if hysteresis is None or not 0 <= hysteresis <= 10:
+        return "invalid_ac_settings"
     contacts = settings.get(CONF_WINDOW_SENSORS, [])
     if not isinstance(contacts, list) or any(
         not isinstance(c, str) or not c.startswith("binary_sensor.") for c in contacts
@@ -148,4 +161,15 @@ def validate_backend(
             return "invalid_backend_limits"
     except (KeyError, TypeError, ValueError, OverflowError):
         return "invalid_backend_limits"
+    outdoor_id = settings.get(CONF_OUTDOOR_SENSOR)
+    if outdoor_id not in (None, ""):
+        outdoor = hass.states.get(outdoor_id) if isinstance(outdoor_id, str) else None
+        if outdoor is None or not outdoor.entity_id.startswith("sensor."):
+            return "invalid_outdoor_sensor"
+        # A temporarily unavailable sensor is accepted (it fails open at run
+        # time); a reading that is not a temperature in a known unit is not.
+        if outdoor.state not in ("unknown", "unavailable") and parse_temperature_celsius(
+            outdoor.state, outdoor.attributes.get("unit_of_measurement")
+        ) is None:
+            return "invalid_outdoor_sensor"
     return validate_ac_settings(settings)

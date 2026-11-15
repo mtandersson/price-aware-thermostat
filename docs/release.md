@@ -1,9 +1,34 @@
 # Release policy, packaging and rollback
 
-> **Nothing in this document authorises public distribution or live heater
-> control.** Both require an explicit decision by the repository owner. This
-> project is a pre-release, ungraded development preview, not approved for
-> controlling production heaters. Nothing below is a support commitment.
+> **Public custom repository, experimental software.** The owner authorized
+> public GitHub visibility and custom Marketplace/HACS installation on
+> 2026-11-14. No default-catalog submission or tagged release is requested.
+> Installing the files does not authorize physical heater/AC cutover or
+> unattended heating.
+
+## Custom installation (no release needed)
+
+On Home Assistant 2026.11+ (verified on 2026.11.1):
+
+1. Settings → Marketplace → the **Add from link** tab.
+2. Paste `https://github.com/mtandersson/price-aware-thermostat` into
+   **GitHub link**, then **Add**. No category is asked for. A GitHub connection
+   is required; the dialog asks you to connect if needed.
+3. Open **Price-Aware Thermostat** and install from the default branch `main`.
+   No release or tag exists or is needed.
+4. Restart when prompted, then Settings → Devices & services → Add integration.
+
+The Marketplace menu (⋮) → **Custom repositories** lists repositories added
+this way. Classic HACS on older Home Assistant: HACS → Custom repositories,
+category **Integration**.
+
+Every new entry starts in shadow mode; verify it before changing the wrapper
+mode or target. Turning shadow mode off asks for the safety confirmation once
+per entry. Settings are described in [settings.md](settings.md).
+
+Use the isolated evaluation guides before selecting real equipment. Existing
+controllers keep ownership during shadow evaluation. Public repository visibility
+and a passing validator are not physical commissioning evidence.
 
 ## License
 
@@ -12,12 +37,14 @@ merged in PR #36. [SECURITY.md](../SECURITY.md) explains private reporting;
 [CONTRIBUTING.md](../CONTRIBUTING.md) describes contribution checks. A license
 is not a supported-release or physical commissioning approval.
 
-## HACS validation status: UNVERIFIED
+## Validation
 
-The HACS action can only validate public repositories. While the repository is
-private, the `hacs` job in `validate.yml` is skipped. A skipped job is **not** a
-pass: HACS validation has not been run and the issue #9 criterion "HACS
-validation succeeds" remains **unmet**. hassfest does run and passes.
+The repository is public. The `hacs` check now runs alongside hassfest rather
+than being skipped for private visibility. The action validates repository
+compatibility; it does not submit anything to the default catalog. See the
+[Validate workflow](https://github.com/mtandersson/price-aware-thermostat/actions/workflows/validate.yml)
+for the result at the commit being installed. Never infer current validation
+from an older green run.
 
 ## Tested versions
 
@@ -49,9 +76,10 @@ says 0.1.0 and is not a release artefact.
 
 Shadow mode remains the default for every new installation.
 
-## Release procedure
+## Optional future tagged release
 
-Do not run these steps without an explicit owner decision to release.
+These steps are outside the current custom-installation decision. Do not run
+them without a separate explicit owner decision to publish a tagged release.
 
 1. Confirm the license decision and that no release-blocking safety issues are open.
 2. Run the full checks (as in README and CI):
@@ -61,20 +89,16 @@ Do not run these steps without an explicit owner decision to release.
    - `mypy custom_components/price_aware_thermostat`
 3. Bump `version` in `custom_components/price_aware_thermostat/manifest.json`.
 4. Move `CHANGELOG.md` Unreleased entries under the new version and date.
-5. Merge to `main`. The HACS check cannot run while the repository is private;
-   the release must not proceed until the HACS validation passes on a public
-   repository, and hassfest passes too.
+5. Merge to `main`; the HACS and hassfest checks must pass on that commit.
 6. Tag `vX.Y.Z` matching the manifest version and create a GitHub release.
-7. HACS custom-repository install (public repository only; HACS cannot add a
-   private one): in HACS choose Custom repositories, add the repository URL
-   with type **Integration**, download the release, restart Home Assistant,
-   then add the integration under Settings, Devices & services.
+7. Install as described under [Custom installation](#custom-installation-no-release-needed),
+   selecting the new release instead of `main`.
 
 ## Upgrade notes
 
 1. Take a Home Assistant backup first.
 2. Read the changelog for the target version.
-3. Update through HACS (or replace the folder), restart Home Assistant.
+3. Update through Marketplace/HACS (or replace the folder), restart Home Assistant.
 4. Confirm new or migrated entries remain in shadow mode before changing anything.
 5. Config entries at version 1 migrate to version 2 with
    `control_type: switch`; entity IDs and settings are preserved.
@@ -99,7 +123,7 @@ Remove:
    under your independent thermostat). Put the entry in shadow mode.
 2. Take a backup.
 3. Delete the integration entry under Devices & services, remove the
-   folder (or uninstall via HACS), restart Home Assistant.
+   folder (or remove it in Marketplace/HACS), restart Home Assistant.
 4. Re-enable the original thermostat or automation for the heater.
 
 Rollback:
@@ -121,8 +145,7 @@ See also [staging validation](staging-validation.md) and
 
 ## Release gates still open
 
-- License decision.
-- HACS validation on a public repository (currently unverified).
+- Successful HACS and hassfest validation for the exact installation commit.
 - HACS repository-level requirements: GitHub repository description and
   topics, issues enabled, repository not archived, brands check.
 - Installation, upgrade, remove and rollback tested in a disposable Home

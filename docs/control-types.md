@@ -103,6 +103,28 @@ unavailable never reaches the open delay), and `window_status` reports
 `unknown`. A window that is open while its contact is unavailable is therefore
 not detected. Any open contact wins over unknown ones.
 
+### Outdoor lockouts (optional)
+
+With an outdoor temperature sensor, cooling can be allowed only at or above a
+limit and heating only at or below another (see
+[settings](settings.md#outdoor-lockouts)). Each lockout has its own state with
+hysteresis (default 1.0 °C): it engages when the outdoor temperature crosses the
+limit and releases once it is the hysteresis past the limit on the allowed side.
+The state is kept between evaluations and restored after a restart.
+
+While the wrapper's direction is locked, its HVAC mode stays as set, the
+proposed backend mode is off, and `intent_reason` and `pause_reason` are
+`outdoor_lockout`. Only the locked direction is affected: with heat and cool
+both configured, a cooling lockout never blocks heating. A restart after a
+lockout releases still waits for the restart pause.
+
+A missing, unavailable, non-numeric or stale (older than the maximum sensor age)
+outdoor reading **fails open**: nothing is locked, so a sensor fault never blocks
+heating. Attributes: `outdoor_temperature_c`, `outdoor_lockout` (`none`, `heat`
+or `cool`, for the current direction), `outdoor_heat_locked`,
+`outdoor_cool_locked` and `outdoor_sensor_status`. The switch type ignores
+these settings.
+
 ### Units
 
 Home Assistant reports a climate's limits and target, and expects service
@@ -155,7 +177,8 @@ switch call, including for off, sensor-failure, window and error paths:
 | `proposed_backend_mode`, `proposed_native_target_c` | What the wrapper would command. |
 | `observed_backend_mode`, `observed_native_target_c` | What the backend currently reports (for example under its existing controller). |
 | `backend_in_sync`, `command_status` | Whether they agree and why a command is waiting. |
-| `intent_reason`, `pause_reason`, `window_status` | Why the proposal is off, and window/restart pauses. |
+| `intent_reason`, `pause_reason`, `window_status` | Why the proposal is off, and window/restart/outdoor-lockout pauses. |
+| `outdoor_temperature_c`, `outdoor_lockout`, `outdoor_sensor_status` | Outdoor reading, the active lockout (`none`/`heat`/`cool`) and sensor health. |
 | `base_target_c`, `effective_target_c`, `compensation_c` | The three temperatures. |
 
 Savings must not be inferred from a price-adjusted target alone. Real savings
@@ -190,7 +213,7 @@ on the clock, and its state is only written when something changed.
 Options can edit the price source and area, the sensor and actuator within the
 same control type, the AC modes, thermostat settings including the maximum price
 adjustment (both control types), and the AC-only settings (compensation, window
-contacts and delays). Changing control type requires a new entry. The maximum
+contacts and delays, outdoor lockouts). Changing control type requires a new entry. The maximum
 price adjustment is required (0–20 °C; set 0 to disable price adjustment) and
 cannot be left empty; leaving *Window contacts* empty clears them.
 Retargeting retains the wrapper entry/entity identity and updates the actuator

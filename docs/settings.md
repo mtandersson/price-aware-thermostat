@@ -237,6 +237,45 @@ All settings in this group apply to the heat pump/AC type only.
 - How long all contacts must stay closed before operation resumes. Then the
   thermostat starts from a fresh hysteresis state.
 
+## Outdoor lockouts
+
+All settings in this group apply to the heat pump/AC type only and are optional;
+an empty field disables that lockout. They change only what the thermostat
+proposes: the wrapper keeps the HVAC mode you chose, and the locked direction is
+proposed as off (through the usual restart pause and command rules). In shadow
+mode nothing is written.
+
+### Outdoor temperature sensor
+- Default: none.
+- A temperature sensor outdoors (°C, °F or K). A sensor that is missing,
+  unavailable, not a number or older than the maximum temperature sample age
+  never locks anything: the lockouts fail open, so a sensor fault cannot block
+  heating. `outdoor_sensor_status` shows `ok`, `unavailable`, `stale`,
+  `invalid` or `not_configured`, and a warning is logged.
+- The outdoor sensor uses the same maximum temperature sample age as the room
+  sensor. An outdoor source that updates rarely will read as stale and fail
+  open; check `outdoor_sensor_status` and raise the sample age if needed.
+- A lock restored after a restart is kept until the first valid outdoor reading
+  or for at most 120 s, so a sensor that loads late does not release it.
+
+### Cool only when outdoor is at or above (°C)
+- Default: empty (disabled). Range: −40 to 40.
+- Cooling is locked while the outdoor temperature is below this value.
+- Example: 15 stops the pump cooling on a cool day.
+
+### Heat only when outdoor is at or below (°C)
+- Default: empty (disabled). Range: −40 to 40.
+- Heating is locked while the outdoor temperature is above this value.
+- Example: 15 stops the pump heating on a warm day.
+
+### Hysteresis (°C)
+- Default: 1.0. Range: 0 to 10.
+- A lockout engages when the outdoor temperature crosses its limit and releases
+  only once it is this far past the limit on the allowed side.
+- Example: heating limit 15 and hysteresis 1.0: heating locks above 15 °C and
+  unlocks at 14 °C or below. Cooling limit 15: locks below 15 °C, unlocks at
+  16 °C or above.
+
 ## Safety
 
 ### Shadow mode

@@ -12,8 +12,7 @@ All notable changes are documented here. The format follows
 
 `0.2.0` in `manifest.json` is only a placeholder version, not a release: no tag
 or GitHub release exists. The entries below reflect `main`. Open before any
-release: HACS validation (unverified while the repository is
-private) and an install/upgrade/remove/rollback test in a disposable Home
+release: HACS validation of the selected installation commit and an install/upgrade/remove/rollback test in a disposable Home
 Assistant instance.
 
 ### Changed
@@ -44,6 +43,12 @@ Assistant instance.
 
 ### Added
 
+- Optional outdoor-temperature lockouts for the heat pump/AC type: an outdoor
+  sensor, "cool only when outdoor is at or above" and "heat only when outdoor is
+  at or below" limits, and a hysteresis (default 1.0 °C). A locked direction is
+  proposed as off while the wrapper mode is kept; a missing, unavailable or stale
+  outdoor sensor never locks. Absent settings mean disabled, so no migration.
+  See [docs/control-types.md](docs/control-types.md#outdoor-lockouts-optional).
 - Field help texts for every setup, reconfigure and options field, a
   [settings reference](docs/settings.md) with a worked price example, and a
   Swedish translation.
@@ -58,6 +63,10 @@ Assistant instance.
   the actuator). Clearer price-source labels.
 - An **Electricity price** sensor on a new per-entry device, showing the current
   price used plus source entry, market area, weighted future price and freshness.
+- Public custom-repository installation through the built-in Marketplace on
+  Home Assistant 2026.11+, with default-branch installation and no catalog
+  submission or tagged release (Settings → Marketplace → Add from link).
+- Sandbox evaluation summary in the AC evaluation guide.
 
 - Bounded price-action (30 s) and switch/climate-action (10 s) waits, with
   cancellation and retry/corrective-OFF regressions (#12).

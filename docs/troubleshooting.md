@@ -98,6 +98,6 @@ The price coordinator checks for missing calendar-day prices every 15 minutes, c
 - Incorrect physical safe-temperature bounds cannot be corrected in software.
 - The integration does not guarantee communication with or actual operation of a physical switch.
 - No historical trend chart is shipped. For comparison, use the climate attributes in a staging dashboard with limited retention.
-- The custom integration has no official Home Assistant quality tier and is not released through HACS.
+- The custom integration has no official Home Assistant quality tier and is not in the default Marketplace/HACS catalog; it is installed as a custom repository from `main`.
 
 See [staging validation](staging-validation.md) and the [GitHub issue tracker](https://github.com/mtandersson/price-aware-thermostat/issues) for evidence, open risks and future work.
