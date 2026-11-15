@@ -299,3 +299,32 @@ async def test_options_flow_validates_saves_and_clears_lockouts(hass: HomeAssist
     assert cleared["type"] is FlowResultType.CREATE_ENTRY
     for key in (CONF_OUTDOOR_SENSOR, CONF_COOL_MIN_OUTDOOR, CONF_HEAT_MAX_OUTDOOR):
         assert cleared["data"][key] is None
+
+
+RESTORED = ("heat", {"outdoor_heat_locked": True, "outdoor_cool_locked": False})
+
+
+async def test_restored_lock_is_held_while_the_sensor_is_unavailable_at_startup(
+    hass: HomeAssistant,
+) -> None:
+    hass.states.async_set(OUTDOOR, "unavailable")
+    async with ac_env(hass, data=lockouts(), restore=RESTORED) as env:
+        await env.advance(60)
+        assert env.attrs["outdoor_sensor_status"] == "unavailable"
+        assert env.attrs["outdoor_heat_locked"] is True
+        assert env.attrs["intent_reason"] == "outdoor_lockout"
+        assert env.calls() == []
+        await env.advance(61)  # grace period over, still unavailable: fail open
+        assert env.attrs["outdoor_heat_locked"] is False
+        assert env.calls()[0] == ("mode", "heat")
+
+
+async def test_a_valid_reading_within_the_grace_period_applies_hysteresis(
+    hass: HomeAssistant,
+) -> None:
+    hass.states.async_set(OUTDOOR, "unavailable")
+    async with ac_env(hass, data=lockouts(), restore=RESTORED) as env:
+        await set_outdoor(hass, "14.5")  # inside the band: the lock holds
+        assert env.attrs["outdoor_heat_locked"] is True
+        await set_outdoor(hass, "unavailable")  # no hold after a valid reading
+        assert env.attrs["outdoor_heat_locked"] is False

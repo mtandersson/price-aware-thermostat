@@ -252,6 +252,11 @@ mode nothing is written.
   never locks anything: the lockouts fail open, so a sensor fault cannot block
   heating. `outdoor_sensor_status` shows `ok`, `unavailable`, `stale`,
   `invalid` or `not_configured`, and a warning is logged.
+- The outdoor sensor uses the same maximum temperature sample age as the room
+  sensor. An outdoor source that updates rarely will read as stale and fail
+  open; check `outdoor_sensor_status` and raise the sample age if needed.
+- A lock restored after a restart is kept until the first valid outdoor reading
+  or for at most 120 s, so a sensor that loads late does not release it.
 
 ### Cool only when outdoor is at or above (°C)
 - Default: empty (disabled). Range: −40 to 40.

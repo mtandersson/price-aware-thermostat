@@ -552,6 +552,9 @@ class ClimateBackendThermostat(PriceAwareThermostat):
         )
         self._outdoor_c: float | None = None
         self._outdoor_status = "not_configured"
+        # A restored lock is held until the first valid reading or the startup
+        # grace period, so a sensor that loads late cannot release it.
+        self._hold_restored_lock = False
 
     # -- hooks used by the shared optimizer code -------------------------------
     def _optimizer_mode(self) -> Literal["heat", "cool"]:
@@ -573,6 +576,7 @@ class ClimateBackendThermostat(PriceAwareThermostat):
                 self._lockout.cool_min is not None
                 and old.attributes.get("outdoor_cool_locked") is True
             )
+            self._hold_restored_lock = self._lockout.heat_locked or self._lockout.cool_locked
         await super().async_added_to_hass()
 
     def _update_outdoor(self) -> None:
@@ -601,7 +605,10 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             )
         self._outdoor_status = status
         self._outdoor_c = value
-        self._lockout.update(value)
+        if value is not None or _monotonic() - self._started_at >= STARTUP_GRACE_SECONDS:
+            self._hold_restored_lock = False
+        if not self._hold_restored_lock:
+            self._lockout.update(value)
 
     def _outdoor_lockout(self) -> str:
         """The lockout affecting the wrapper's current direction (none/heat/cool)."""
