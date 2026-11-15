@@ -234,6 +234,12 @@ async def test_hvac_modes_match_the_control_type(hass: HomeAssistant, kind: str)
         assert modes == (["heat", "off"] if kind == "switch" else ["heat", "cool", "heat_cool", "off"])
 
 
+@pytest.mark.parametrize("kind", TYPES)
+async def test_target_temperature_step_is_a_tenth_degree(hass: HomeAssistant, kind: str) -> None:
+    async with rig_for(kind, hass, shadow=True) as rig:
+        assert rig.attrs()["target_temp_step"] == 0.1
+
+
 async def test_switch_and_climate_instances_run_side_by_side_without_interference(
     hass: HomeAssistant,
 ) -> None:

@@ -56,6 +56,7 @@ Assistant instance.
 
 ### Fixed
 
+- Thermostat setpoints now change in 0.1 °C steps; the step was set on an attribute name Home Assistant climate entities do not read, so the default 0.5 °C step applied.
 - In shadow mode the thermostat's `hvac_action` (the card's Heating/Cooling/Idle/Off)
   now shows the wrapper's own proposal instead of the device's reported action, so
   an off or idle wrapper no longer looks as if it is cooling or heating. Applies to
