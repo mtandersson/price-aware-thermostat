@@ -12,8 +12,7 @@ All notable changes are documented here. The format follows
 
 `0.2.0` in `manifest.json` is only a placeholder version, not a release: no tag
 or GitHub release exists. The entries below reflect `main`. Open before any
-release: HACS validation (unverified while the repository is
-private) and an install/upgrade/remove/rollback test in a disposable Home
+release: HACS validation of the selected installation commit and an install/upgrade/remove/rollback test in a disposable Home
 Assistant instance.
 
 ### Changed
@@ -26,6 +25,16 @@ Assistant instance.
   **Maximum price adjustment** in the options, for example to 1.5 to reach 7.5
   again. The minimum and maximum still apply as absolute limits. See
   [docs/settings.md](docs/settings.md#maximum-price-deviation).
+
+### Fixed
+
+- A climate entity whose registry name was customised kept its friendly name
+  after the per-entry device was added, instead of becoming
+  "<entry title> <custom name>" (#46). Config entry migration to 2.3 moves the
+  custom name to the device's user-set name and clears the entity name, once.
+  It changes nothing when the device already has a user-set name, and never
+  changes the entity_id. The price sensor is then named "<custom name>
+  Electricity price".
 
 ### Added
 
@@ -49,6 +58,10 @@ Assistant instance.
   the actuator). Clearer price-source labels.
 - An **Electricity price** sensor on a new per-entry device, showing the current
   price used plus source entry, market area, weighted future price and freshness.
+- Public custom-repository installation through the built-in Marketplace on
+  Home Assistant 2026.11+, with default-branch installation and no catalog
+  submission or tagged release (Settings → Marketplace → Add from link).
+- Sandbox evaluation summary in the AC evaluation guide.
 
 - Bounded price-action (30 s) and switch/climate-action (10 s) waits, with
   cancellation and retry/corrective-OFF regressions (#12).

@@ -61,7 +61,7 @@ async def test_legacy_migration_retains_all_user_choices(hass: HomeAssistant) ->
     entry.add_to_hass(hass)
     old_options = dict(entry.options)
     assert await async_migrate_entry(hass, entry)
-    assert (entry.version, entry.minor_version) == (2, 2)
+    assert (entry.version, entry.minor_version) == (2, 3)
     assert entry.data[CONF_CONTROL_TYPE] == CONTROL_SWITCH
     assert entry.unique_id == "switch.storage"
     # User choices are untouched; the old implicit limits are pinned so the
@@ -98,14 +98,14 @@ async def test_minor_migration_sets_deviation_and_keeps_limits(
     entry.add_to_hass(hass)
     assert await async_migrate_entry(hass, entry)
     merged = {**entry.data, **entry.options}
-    assert entry.minor_version == 2
+    assert entry.minor_version == 3
     assert merged[CONF_MAX_DEVIATION] == expected
     assert (merged[CONF_MIN_TEMP], merged[CONF_MAX_TEMP]) == (18, 26)
 
 
 async def test_current_entries_are_not_migrated_again(hass: HomeAssistant) -> None:
     entry = MockConfigEntry(
-        domain=DOMAIN, version=2, minor_version=2, data={}, options={CONF_SHADOW: True},
+        domain=DOMAIN, version=2, minor_version=3, data={}, options={CONF_SHADOW: True},
     )
     entry.add_to_hass(hass)
     assert await async_migrate_entry(hass, entry)

@@ -18,13 +18,29 @@ See [control types and backend contract](docs/control-types.md) and, for the
 AC type, [evaluation, compatibility and migration](docs/ac-evaluation-and-migration.md).
 A synthetic, simulation-only [optimizer benchmark](docs/benchmark.md) is also available; it does not measure real savings.
 
-## HACS (not yet available)
+## Install as a custom repository
 
-The repository carries HACS metadata, but no release exists, HACS validation is
-unverified (the HACS check cannot run on a private repository) and HACS cannot
-add a private repository. Only after the owner makes the repository public and
-publishes a release could it be added as a custom repository of type
-**Integration**. See [release policy and procedures](docs/release.md).
+Home Assistant 2026.11 and newer includes HACS as the built-in **Marketplace**.
+
+1. Open **Settings → Marketplace** and select the **Add from link** tab.
+2. Paste `https://github.com/mtandersson/price-aware-thermostat` into
+   **GitHub link** and select **Add**. No category is asked for. A GitHub
+   connection is required; the dialog asks you to connect if needed.
+3. Open **Price-Aware Thermostat** and install it from the default branch
+   `main`. No release or tag exists or is needed.
+4. Restart Home Assistant when prompted, then go to **Settings → Devices &
+   services → Add integration** and add **Price-Aware Thermostat**.
+5. Leave **Shadow mode** enabled during evaluation. Every setting is explained
+   in the [settings reference](docs/settings.md).
+
+Repositories added this way are listed under the Marketplace menu (⋮) →
+**Custom repositories**. On older Home Assistant with classic HACS, use
+HACS → **Custom repositories** and choose the category **Integration**.
+
+The repository is public for custom installation. It has **not** been submitted
+to the default catalog, and no tagged release is required or published.
+Installation does not authorize taking over an existing heater or AC controller.
+See [installation and rollback](docs/release.md).
 
 ## Release status
 
@@ -53,11 +69,11 @@ Do not install this on a heater that lacks independent hardware safety controls.
 1. Copy `custom_components/price_aware_thermostat` into the `custom_components` folder of a non-production Home Assistant instance.
 2. Restart Home Assistant and add **Price-Aware Thermostat** under Settings → Devices & services.
 3. Select a temperature sensor, switch, official Nord Pool integration entry and market area (e.g. `SE4`).
-4. Configure minimum, base and maximum temperatures. These are safety-relevant, not pre-approved defaults for your equipment.
+4. Configure base, minimum and maximum temperatures and the maximum price deviation (default ±0.8 °C); see the [settings reference](docs/settings.md). Minimum and maximum are safety-relevant, not pre-approved defaults for your equipment.
 5. Leave **Shadow mode** enabled. Inspect `planned_heating`, `effective_target_c`, `optimization_reason` and current sensor readings.
 6. Only consider disabling shadow mode after a physical safety inspection, backup and exclusive switch-ownership review, using the separate commissioning checklist.
 
-This is a custom integration under development, not a graded Home Assistant Core integration or a released HACS integration.
+This is a custom integration under development, not a graded Home Assistant Core integration, not in the default Marketplace/HACS catalog, and without tagged releases.
 
 ## How the optimizer works
 
