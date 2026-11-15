@@ -12,8 +12,7 @@ All notable changes are documented here. The format follows
 
 `0.2.0` in `manifest.json` is only a placeholder version, not a release: no tag
 or GitHub release exists. The entries below reflect `main`. Open before any
-release: HACS validation (unverified while the repository is
-private) and an install/upgrade/remove/rollback test in a disposable Home
+release: HACS validation of the selected installation commit and an install/upgrade/remove/rollback test in a disposable Home
 Assistant instance.
 
 ### Changed
@@ -53,6 +52,10 @@ Assistant instance.
   the actuator). Clearer price-source labels.
 - An **Electricity price** sensor on a new per-entry device, showing the current
   price used plus source entry, market area, weighted future price and freshness.
+- Public custom-repository installation through the built-in Marketplace on
+  Home Assistant 2026.11+, with default-branch installation and no catalog
+  submission or tagged release (Settings → Marketplace → Add from link).
+- Sandbox evaluation summary in the AC evaluation guide.
 
 - Bounded price-action (30 s) and switch/climate-action (10 s) waits, with
   cancellation and retry/corrective-OFF regressions (#12).

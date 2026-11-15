@@ -1,6 +1,7 @@
 name: Validate
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches: [main]
@@ -12,9 +13,8 @@ permissions:
 
 jobs:
   hacs:
-    # The HACS action can only validate public repositories. While the repo is
-    # private this job is SKIPPED, which is not a pass: HACS validation is
-    # unverified until the repository is public.
+    # Validate this public custom repository. Running this check does not
+    # submit it to the default catalog or publish a release.
     if: ${{ github.event.repository.visibility == 'public' }}
     runs-on: ubuntu-latest
     steps:
