@@ -328,3 +328,16 @@ async def test_a_valid_reading_within_the_grace_period_applies_hysteresis(
         assert env.attrs["outdoor_heat_locked"] is True
         await set_outdoor(hass, "unavailable")  # no hold after a valid reading
         assert env.attrs["outdoor_heat_locked"] is False
+
+
+async def test_shadow_lockout_reports_idle_not_the_backend_action(hass: HomeAssistant) -> None:
+    async with ac_env(hass, shadow=True, room="18.0", data=lockouts()) as env:
+        await env.set_mode("heat")
+        assert env.state().attributes["hvac_action"] == "heating"
+        await set_outdoor(hass, "16")
+        env.pump._attr_hvac_action = "heating"
+        env.pump.async_write_ha_state()
+        await hass.async_block_till_done()
+        assert env.attrs["pause_reason"] == "outdoor_lockout"
+        assert env.state().attributes["hvac_action"] == "idle"
+        assert env.calls() == []

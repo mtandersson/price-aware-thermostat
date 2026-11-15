@@ -164,8 +164,24 @@ evaluation procedure, dashboard example, exporter status and rollback steps.
 
 `backend_reported_hvac_action` is what the backend *says*. The minimum restart
 pause protects software scheduling; neither it nor a reported mode proves that a
-compressor is running or has rested. The wrapper's own `hvac_action` shows `off`
-when the wrapper is off, and otherwise only what the backend reports.
+compressor is running or has rested.
+
+The wrapper's own `hvac_action` (what the thermostat card shows) depends on the
+mode (issue #41):
+
+- **Shadow:** the wrapper's own proposal, never the device state. `off` when the
+  wrapper is off; `heating` or `cooling` only while the proposal has demand in
+  that direction; otherwise `idle`, including no demand, a window pause, an
+  outdoor lockout and a missing room temperature (the wrapper mode is still on,
+  so `idle` rather than `off`). For a switch, `heating` means `planned_heating`
+  is true, whatever the relay is doing.
+- **Live:** mirrors the device. A heat-pump/AC wrapper shows the backend's
+  reported action, and `off` only when the wrapper is off and the backend is
+  observed off. A switch shows `heating` while the relay is on, `off` when the
+  wrapper is off and the relay is off, and `idle` otherwise.
+
+The backend's report stays available as `backend_reported_hvac_action` in both
+modes.
 
 ### Shadow evaluation
 

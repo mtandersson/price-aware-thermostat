@@ -1,6 +1,7 @@
 """Heat-pump/AC controller behaviour against a fake underlying climate (issue #23)."""
 
 from datetime import timedelta
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -450,16 +451,86 @@ async def test_shadow_mode_exposes_the_proposal_beside_the_observed_backend(
         assert env.calls() == []
 
 
+async def report(env: Any, hass: HomeAssistant, action: str) -> None:
+    env.pump._attr_hvac_action = action
+    env.pump.async_write_ha_state()
+    await hass.async_block_till_done()
+
+
 async def test_reported_action_is_exposed_but_not_treated_as_compressor_runtime(
     hass: HomeAssistant,
 ) -> None:
-    async with ac_env(hass, shadow=True) as env:
+    async with ac_env(hass, shadow=True, room="23.0") as env:
         await env.set_mode("heat")
-        assert env.state().attributes.get("hvac_action") != "heating"
-        env.pump._attr_hvac_action = "heating"
-        env.pump.async_write_ha_state()
-        await hass.async_block_till_done()
+        await report(env, hass, "heating")
         assert env.attrs["backend_reported_hvac_action"] == "heating"
+        assert env.state().attributes["hvac_action"] == "idle"
+
+
+# ---------------------------------------------- shadow hvac_action (issue #41)
+async def test_shadow_off_wrapper_reports_off_while_backend_cools(hass: HomeAssistant) -> None:
+    async with ac_env(hass, shadow=True, pump_mode=HVACMode.COOL) as env:
+        await report(env, hass, "cooling")
+        assert env.state().state == "off"
+        assert env.state().attributes["hvac_action"] == "off"
+        assert env.attrs["backend_reported_hvac_action"] == "cooling"
+        assert env.calls() == []
+
+
+async def test_shadow_heat_without_demand_is_idle_while_backend_cools(
+    hass: HomeAssistant,
+) -> None:
+    async with ac_env(hass, shadow=True, room="23.0", pump_mode=HVACMode.COOL) as env:
+        await env.set_mode("heat")
+        await report(env, hass, "cooling")
+        assert env.attrs["intent_reason"] == "no_demand"
+        assert env.state().attributes["hvac_action"] == "idle"
+        assert env.attrs["backend_reported_hvac_action"] == "cooling"
+        assert env.calls() == []
+
+
+async def test_shadow_heat_with_demand_is_heating_whatever_the_backend_says(
+    hass: HomeAssistant,
+) -> None:
+    async with ac_env(hass, shadow=True, room="18.0") as env:
+        await env.set_mode("heat")
+        await report(env, hass, "idle")
+        assert env.attrs["intent_reason"] == "demand"
+        assert env.state().attributes["hvac_action"] == "heating"
+        assert env.calls() == []
+
+
+async def test_shadow_cool_with_demand_is_cooling(hass: HomeAssistant) -> None:
+    async with ac_env(hass, shadow=True, room="27.0") as env:
+        await env.set_mode("cool")
+        await report(env, hass, "off")
+        assert env.state().attributes["hvac_action"] == "cooling"
+        assert env.calls() == []
+
+
+async def test_shadow_window_pause_is_idle(hass: HomeAssistant) -> None:
+    async with ac_env(
+        hass, shadow=True, room="18.0", data=window_data(), extra_states={WINDOW: "off"}
+    ) as env:
+        await env.set_mode("heat")
+        assert env.state().attributes["hvac_action"] == "heating"
+        hass.states.async_set(WINDOW, "on")
+        await hass.async_block_till_done()
+        await env.advance(120)
+        await report(env, hass, "heating")
+        assert env.attrs["pause_reason"] == "window_open"
+        assert env.state().attributes["hvac_action"] == "idle"
+        assert env.calls() == []
+
+
+async def test_live_action_still_mirrors_the_backend(hass: HomeAssistant) -> None:
+    async with ac_env(hass, room="23.0") as env:
+        await env.set_mode("cool")
+        await report(env, hass, "cooling")
+        assert env.state().attributes["hvac_action"] == "cooling"
+        await env.set_mode("heat")
+        await report(env, hass, "fan")
+        assert env.state().attributes["hvac_action"] == "fan"
 
 
 # ------------------------------------------------------------ multiple instances
@@ -555,22 +626,8 @@ async def test_unexpected_exception_from_the_backend_is_contained_and_bounded(
         assert env.pump.hvac_mode == HVACMode.HEAT
 
 
-async def test_wrapper_action_reflects_a_heating_backend_while_the_wrapper_is_off(
-    hass: HomeAssistant,
-) -> None:
-    async with ac_env(hass, shadow=True, pump_mode=HVACMode.HEAT) as env:
-        assert env.state().state == "off"
-        assert env.state().attributes.get("hvac_action") != "off"
-        env.pump._attr_hvac_action = "heating"
-        env.pump.async_write_ha_state()
-        await hass.async_block_till_done()
-        assert env.state().attributes["hvac_action"] == "heating"
-        assert env.attrs["backend_reported_hvac_action"] == "heating"
-        assert env.calls() == []
-
-
 async def test_wrapper_action_is_off_once_the_backend_is_really_off(hass: HomeAssistant) -> None:
-    async with ac_env(hass, shadow=True) as env:
+    async with ac_env(hass) as env:
         assert env.state().attributes["hvac_action"] == "off"
 
 

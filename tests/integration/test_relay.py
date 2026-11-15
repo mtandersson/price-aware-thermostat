@@ -101,3 +101,76 @@ async def test_invalid_temperature_forces_off_when_live(hass: HomeAssistant) -> 
         assert not on
         assert len(off) >= 1
         assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def _switch_action(
+    hass: HomeAssistant, *, shadow: bool, temperature: str, relay: str,
+    mode: str | None = None,
+) -> str:
+    """Set up a switch wrapper and return its hvac_action."""
+    entry = make_entry(hass, shadow=shadow)
+    hass.states.async_set(
+        "sensor.safety_temperature", temperature, {"unit_of_measurement": "°C"}
+    )
+    hass.states.async_set("switch.safety_heater", relay)
+
+    async def ignore(call: ServiceCall) -> None:
+        return None
+
+    hass.services.async_register("switch", "turn_on", ignore)
+    hass.services.async_register("switch", "turn_off", ignore)
+    with patch(
+        "custom_components.price_aware_thermostat.coordinator."
+        "NordPoolPriceCoordinator._async_update_data",
+        return_value=(),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        if mode is not None:
+            await hass.services.async_call(
+                "climate", "set_hvac_mode",
+                {"entity_id": "climate.safety_test", "hvac_mode": mode}, blocking=True,
+            )
+            await hass.async_block_till_done()
+        state = hass.states.get("climate.safety_test")
+        assert state is not None
+        action = str(state.attributes["hvac_action"])
+        assert await hass.config_entries.async_unload(entry.entry_id)
+    return action
+
+
+async def test_shadow_switch_action_follows_the_plan_not_the_relay(
+    hass: HomeAssistant,
+) -> None:
+    # Cold room, relay off: the plan heats, so the shadow action is heating.
+    assert await _switch_action(hass, shadow=True, temperature="4.0", relay="off") == "heating"
+
+
+async def test_shadow_switch_without_demand_is_idle_while_relay_is_on(
+    hass: HomeAssistant,
+) -> None:
+    assert await _switch_action(hass, shadow=True, temperature="9.0", relay="on") == "idle"
+
+
+async def test_shadow_switch_off_is_off_while_relay_is_on(hass: HomeAssistant) -> None:
+    action = await _switch_action(
+        hass, shadow=True, temperature="4.0", relay="on", mode="off"
+    )
+    assert action == "off"
+
+
+async def test_live_switch_action_mirrors_the_relay(hass: HomeAssistant) -> None:
+    # The turn_off call is ignored, so the relay is still observed on.
+    assert await _switch_action(hass, shadow=False, temperature="9.0", relay="on") == "heating"
+
+
+async def test_live_switch_off_with_relay_still_on_is_not_called_off(
+    hass: HomeAssistant,
+) -> None:
+    on = await _switch_action(hass, shadow=False, temperature="4.0", relay="on", mode="off")
+    assert on == "heating"
+
+
+async def test_live_switch_off_with_relay_off_is_off(hass: HomeAssistant) -> None:
+    off = await _switch_action(hass, shadow=False, temperature="4.0", relay="off", mode="off")
+    assert off == "off"
