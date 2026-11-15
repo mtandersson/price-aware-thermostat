@@ -206,6 +206,26 @@ issue.
   pump must support each selected mode and `off`. A mode that is not
   selected is never sent.
 - Example: select only `heat` for a pump that must never cool.
+- With both `heat` and `cool` selected, the thermostat also offers
+  **heat/cool** (`heat_cool`, Auto in HomeKit): two setpoints on one card. See
+  [heat/cool mode](control-types.md#heatcool-mode-two-setpoints).
+
+### Minimum gap between heat and cool targets (°C) (heat pump/AC only)
+- Default: 1.0. Range: 0.1 to 10.
+- Used only in heat/cool mode. The cooling (high) target must be at least this
+  much above the heating (low) target; a setting that would narrow it is
+  rejected. Price adjustment never narrows the range below it either. Maximum
+  minus minimum temperature must be at least the gap.
+- Example: 1.0 accepts 22/23 °C, rejects 22/22.5 °C.
+
+### Minimum time between heat/cool changeover (minutes) (heat pump/AC only)
+- Default: 30. Range: 0 to 240.
+- Used only in heat/cool mode. After heating last ran, cooling may start only
+  this long afterwards, and the reverse. The room must also have left the
+  active direction's band first, so the pump never flips straight from heating
+  to cooling. The restart pause also applies as usual.
+- Example: 30 means a sunny afternoon after a cold morning waits at least half
+  an hour after heating stopped before cooling starts.
 
 ### Heating and cooling compensation (heat pump/AC only)
 - Defaults: 0.0 °C. Range: −10 to 10, in steps of 0.5.

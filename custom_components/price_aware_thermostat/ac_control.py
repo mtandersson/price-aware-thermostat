@@ -436,3 +436,107 @@ def _throttle(command: Command, memory: CommandMemory, now: float, status: str) 
     if limited:
         return Plan(None, "rate_limited")
     return Plan(command, status)
+
+
+@dataclass
+class RangeSelector:
+    """Pick heat or cool for a dual-setpoint (heat_cool) wrapper, with hysteresis.
+
+    Heating starts at or below ``low - cold`` and stops at ``low + hot``;
+    cooling starts at or above ``high + hot`` and stops at ``high - cold``. A
+    direction never switches straight to the other: its demand must end first,
+    and the other direction may start only ``changeover`` seconds after the
+    previous direction's demand ended. A direction that is not ``allowed``
+    (outdoor lockout) never starts and stops at once; the other direction is
+    never used in its place, so a locked room above ``high`` stays idle.
+    """
+
+    changeover: float = 1800.0
+    direction: AcMode = "off"
+    last_active: AcMode = "off"
+    last_active_at: float | None = None
+    status: str = "idle"
+
+    def __post_init__(self) -> None:
+        if not isfinite(self.changeover) or self.changeover < 0:
+            raise ValueError("Changeover interval must not be negative")
+
+    def stop(self, now: float) -> None:
+        """End any demand (window pause, lockout, sensor fault, mode change)."""
+        if self.direction != "off":
+            self.last_active = self.direction
+            self.last_active_at = now
+        self.direction = "off"
+
+    def resume(self, mode: str | None, now: float) -> None:
+        """Adopt a direction a backend is already running in (after a restart)."""
+        direction: AcMode = "heat" if mode == "heat" else "cool" if mode == "cool" else "off"
+        if direction != "off":
+            self.direction = direction
+            self.last_active = direction
+            self.last_active_at = now
+
+    def select(
+        self,
+        current: float,
+        low: float,
+        high: float,
+        cold: float,
+        hot: float,
+        now: float,
+        heat_allowed: bool = True,
+        cool_allowed: bool = True,
+    ) -> AcMode:
+        """Return the demanded direction ("off" = idle) and update ``status``."""
+        if not all(isfinite(v) for v in (current, low, high)) or low >= high:
+            raise ValueError("A finite range with low < high is required")
+        allowed = {"heat": heat_allowed, "cool": cool_allowed}
+        if self.direction != "off":
+            active = self.direction
+            target = low if active == "heat" else high
+            if allowed[active] and demand(active, current, target, True, cold, hot):
+                self.last_active_at = now
+                self.status = "demand"
+                return active
+            self.stop(now)
+        candidate: AcMode = (
+            "heat" if current <= low - cold else "cool" if current >= high + hot else "off"
+        )
+        if candidate == "off":
+            self.status = "idle"
+            return "off"
+        if not allowed[candidate]:
+            self.status = "outdoor_lockout"
+            return "off"
+        if (
+            self.last_active not in ("off", candidate)
+            and self.last_active_at is not None
+            and now - self.last_active_at < self.changeover
+        ):
+            self.status = "changeover_wait"
+            return "off"
+        self.direction = candidate
+        self.last_active = candidate
+        self.last_active_at = now
+        self.status = "demand"
+        return candidate
+
+
+def adjust_range(
+    low: float, high: float, effective_low: float, effective_high: float, gap: float
+) -> tuple[float, float, bool]:
+    """Keep price-adjusted setpoints at least ``gap`` apart.
+
+    Cheap prices move both setpoints inward (pre-heat raises low, pre-cool
+    lowers high). They are then limited around the middle of the user's range
+    so the adjusted range never becomes narrower than ``gap``. Returns the
+    effective low/high and whether that limit applied.
+    """
+    if effective_high - effective_low >= gap - 1e-9:
+        return effective_low, effective_high, False
+    middle = (low + high) / 2.0
+    return (
+        min(effective_low, max(low, middle - gap / 2.0)),
+        max(effective_high, min(high, middle + gap / 2.0)),
+        True,
+    )

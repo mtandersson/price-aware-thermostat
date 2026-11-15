@@ -42,6 +42,16 @@ CONF_OUTDOOR_SENSOR: Final = "outdoor_temperature_sensor"
 CONF_COOL_MIN_OUTDOOR: Final = "cool_min_outdoor_temperature"
 CONF_HEAT_MAX_OUTDOOR: Final = "heat_max_outdoor_temperature"
 CONF_OUTDOOR_HYSTERESIS: Final = "outdoor_lockout_hysteresis"
+# Dual-setpoint heat_cool (climate backend with both heat and cool). The
+# stored low/high targets live in options like the base target; when absent
+# they default to base and base + 2 (clamped, with the minimum gap), so a
+# base target of 22 °C gives 22/24 °C.
+CONF_HEAT_COOL_GAP: Final = "heat_cool_min_gap"
+CONF_CHANGEOVER_MINUTES: Final = "heat_cool_changeover_minutes"
+CONF_TARGET_LOW: Final = "target_temp_low"
+CONF_TARGET_HIGH: Final = "target_temp_high"
+DEFAULT_LOW_OFFSET: Final = 0.0
+DEFAULT_HIGH_OFFSET: Final = 2.0
 
 # Limits and deviation that applied before config entry minor version 2.
 # Migration pins these on entries that relied on the old defaults, so an
@@ -68,6 +78,8 @@ DEFAULTS: Final[dict[str, float | int | str | bool]] = {
     CONF_WINDOW_OPEN_DELAY: 120,
     CONF_WINDOW_CLOSE_DELAY: 60,
     CONF_OUTDOOR_HYSTERESIS: 1.0,
+    CONF_HEAT_COOL_GAP: 1.0,
+    CONF_CHANGEOVER_MINUTES: 30,
 }
 
 SETTINGS_URL: Final = (

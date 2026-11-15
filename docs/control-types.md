@@ -125,6 +125,53 @@ or `cool`, for the current direction), `outdoor_heat_locked`,
 `outdoor_cool_locked` and `outdoor_sensor_status`. The switch type ignores
 these settings.
 
+### Heat/cool mode (two setpoints)
+
+When both `heat` and `cool` are controlled (and the pump supports both), the
+wrapper also offers `heat_cool` with `TARGET_TEMPERATURE_RANGE`. The thermostat
+and tile cards then show two setpoints, and HomeKit shows Auto with heating and
+cooling thresholds. With only one direction controlled nothing changes.
+
+- **Setpoints.** `target_temp_low` (heat below) and `target_temp_high` (cool
+  above). Defaults for an entry that has never set them: low = base target,
+  high = base + 2 (base 22 °C gives 22/24 °C), clamped to the minimum and
+  maximum temperature with the minimum gap kept. Both must lie within the
+  minimum/maximum and be at least the **minimum gap** (default 1.0 °C) apart;
+  otherwise the call is rejected (`range_too_narrow`). They are stored in the
+  entry options like the base target and survive restarts. A single
+  `temperature` sent in heat/cool moves the range to centre on it (width kept,
+  clamped to the limits). An `hvac_mode` in the same call is applied first.
+  In heat/cool the card's single `temperature` is empty; in heat or cool the
+  range attributes are empty and the base target is used as before.
+- **Direction.** Heating starts at or below low − cold tolerance and stops at
+  low + warm tolerance; cooling starts at or above high + warm tolerance and
+  stops at high − cold tolerance. Between them the wrapper is idle and the pump
+  is turned off (through the usual command rules). The direction never switches
+  directly: demand must end first, and the opposite direction starts only after
+  the **minimum changeover time** (default 30 min) since the last one ran
+  (`heat_cool_status` / `pause_reason` = `changeover_wait`). The restart pause
+  applies on top. After a Home Assistant restart a pump already heating or
+  cooling keeps that direction.
+- **Outdoor lockouts and windows.** Applied per direction. Cooling never starts
+  while it is outdoor-locked (below the cooling limit, with hysteresis), and
+  heating never above the heating limit. A hot room with cooling locked stays
+  idle with the pump off: it neither cools nor heats, and `pause_reason` is
+  `outdoor_lockout`. A running direction stops when it becomes locked.
+  `outdoor_lockout` reports `heat`, `cool` or `both`. An outdoor sensor fault
+  still fails open. An open window pauses both directions.
+- **Price.** Each setpoint is price-adjusted by the optimizer in its own
+  direction, within ± maximum price deviation and the minimum/maximum: cheap
+  now raises low (pre-heat) and lowers high (pre-cool); expensive now does the
+  opposite. Cheap adjustments are limited around the middle of the range so the
+  range never becomes narrower than the minimum gap (`adjustment_clamped`).
+  Attributes: `effective_target_low_c`, `effective_target_high_c`,
+  `active_direction` (`heat`, `cool` or `idle`) and `effective_target_c`
+  (the active direction's target, empty when idle). Price attributes follow
+  the active direction (heating when idle).
+- **Commands.** The active direction's mode and native target with that
+  direction's compensation, exactly as in heat or cool mode. Shadow mode
+  writes nothing; `hvac_action` shows the proposal.
+
 ### Units
 
 Home Assistant reports a climate's limits and target, and expects service
