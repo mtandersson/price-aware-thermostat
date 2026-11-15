@@ -1,6 +1,8 @@
 """Dual-setpoint heat_cool mode for the heat-pump/AC control type."""
 
+import time
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from homeassistant.components.climate import ClimateEntityFeature, HVACMode
@@ -283,3 +285,109 @@ async def test_shadow_heat_cool_makes_no_writes(hass: HomeAssistant) -> None:
         await env.advance(3600)
         assert env.state().attributes["hvac_action"] == "cooling"
         assert env.calls() == []
+
+
+# ---------------------------------------------------------------- cooling fails closed
+COOL_LIMIT = {CONF_OUTDOOR_SENSOR: OUTDOOR, CONF_COOL_MIN_OUTDOOR: 15.0}
+
+
+def _fault(hass: HomeAssistant, fault: str) -> None:
+    if fault == "unavailable":
+        hass.states.async_set(OUTDOOR, "unavailable")
+    elif fault == "invalid":
+        hass.states.async_set(OUTDOOR, "warm", {"unit_of_measurement": "°C"})
+    else:
+        hass.states.async_set(
+            OUTDOOR, "30", {"unit_of_measurement": "°C"}, timestamp=time.time() - 7200
+        )
+
+
+@pytest.mark.parametrize("fault", ["unavailable", "stale", "invalid"])
+@pytest.mark.parametrize("mode", ["heat_cool", "cool"])
+async def test_outdoor_sensor_fault_never_allows_cooling(
+    hass: HomeAssistant, fault: str, mode: str
+) -> None:
+    _fault(hass, fault)
+    async with ac_env(hass, room="28.0", data=COOL_LIMIT) as env:
+        await env.set_mode(mode)
+        await env.advance(3600)
+        assert env.calls() == []
+        attrs = env.attrs
+        assert attrs["outdoor_cool_locked"] is True
+        assert attrs["outdoor_cool_lock_cause"] == "no_valid_reading"
+        assert attrs["outdoor_sensor_status"] == fault
+        assert attrs["pause_reason"] == "outdoor_lockout"
+        await set_outdoor(hass, "15.5")  # valid, but inside the hysteresis band
+        assert env.calls() == []
+        await set_outdoor(hass, "16.0")
+        assert env.calls()[0] == ("mode", "cool")
+        assert env.attrs["outdoor_cool_lock_cause"] is None
+
+
+async def test_fresh_start_without_reading_does_not_cool(hass: HomeAssistant) -> None:
+    async with ac_env(hass, room="28.0", data=COOL_LIMIT) as env:
+        await env.set_mode("heat_cool")
+        assert env.calls() == []
+        assert env.attrs["outdoor_sensor_status"] == "unavailable"
+
+
+async def test_resume_with_running_cool_and_sensor_fault_turns_off(
+    hass: HomeAssistant,
+) -> None:
+    hass.states.async_set(OUTDOOR, "unavailable")
+    async with ac_env(
+        hass, room="25.0", pump_mode=HVACMode.COOL, pump_target=24.0, data=COOL_LIMIT,
+        restore=("heat_cool", {"outdoor_cool_locked": False}),
+    ) as env:
+        assert env.calls() == [("mode", "off")]
+        assert env.attrs["active_direction"] == "idle"
+
+
+async def test_heating_is_allowed_during_a_sensor_fault(hass: HomeAssistant) -> None:
+    hass.states.async_set(OUTDOOR, "unavailable")
+    data = {**COOL_LIMIT, CONF_HEAT_MAX_OUTDOOR: 15.0}
+    async with ac_env(hass, room="20.0", data=data) as env:
+        await env.set_mode("heat_cool")
+        assert env.calls()[0] == ("mode", "heat")
+        assert env.attrs["outdoor_heat_locked"] is False
+
+
+# ---------------------------------------------------------------- mode switch
+async def test_switching_from_running_heat_keeps_the_changeover(hass: HomeAssistant) -> None:
+    async with ac_env(hass, room="21.0") as env:
+        await env.set_mode("heat")
+        assert env.calls()[0] == ("mode", "heat")
+        await env.set_mode("heat_cool")
+        assert env.attrs["active_direction"] == "heat"
+        await env.set_room("25.0")
+        assert env.calls()[-1] == ("mode", "off")
+        assert env.attrs["pause_reason"] == "changeover_wait"
+        await env.advance(30 * 60)
+        assert env.calls()[-2:] == [("mode", "cool"), ("temp", 24.0)]
+
+
+async def test_recent_single_mode_cooling_counts_for_the_changeover(
+    hass: HomeAssistant,
+) -> None:
+    async with ac_env(hass, room="25.0") as env:
+        await env.set_mode("cool")
+        await env.set_room("23.0")  # cooling ends in single cool mode
+        await env.set_mode("heat_cool")
+        await env.set_room("21.0")
+        assert env.attrs["pause_reason"] == "changeover_wait"
+
+
+# ---------------------------------------------------------------- rejection
+async def test_rejected_range_republishes_the_stored_values(hass: HomeAssistant) -> None:
+    async with ac_env(hass, room="23.0") as env:
+        await env.set_mode("heat_cool")
+        entity = hass.data["climate"].get_entity(WRAPPER)
+        with patch.object(entity, "async_write_ha_state") as write:
+            with pytest.raises(ServiceValidationError):
+                await entity.async_set_temperature(target_temp_low=23.5, target_temp_high=24.0)
+            write.assert_called()
+        with patch.object(entity, "async_write_ha_state") as write:
+            with pytest.raises(ServiceValidationError):
+                await entity.async_set_temperature(target_temp_low=10.0, target_temp_high=24.0)
+            write.assert_called()
+        assert (env.attrs["target_temp_low"], env.attrs["target_temp_high"]) == (22.0, 24.0)

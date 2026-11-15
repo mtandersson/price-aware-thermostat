@@ -576,8 +576,9 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             return None if value is None or isinstance(value, bool) else float(value)
 
         self._lockout = OutdoorLockout(
-            cool_min=threshold(CONF_COOL_MIN_OUTDOOR),
-            heat_max=threshold(CONF_HEAT_MAX_OUTDOOR),
+            # Without a sensor the thresholds have no meaning and are disabled.
+            cool_min=threshold(CONF_COOL_MIN_OUTDOOR) if self._outdoor_sensor else None,
+            heat_max=threshold(CONF_HEAT_MAX_OUTDOOR) if self._outdoor_sensor else None,
             hysteresis=float(
                 settings.get(CONF_OUTDOOR_HYSTERESIS, DEFAULTS[CONF_OUTDOOR_HYSTERESIS])
             ),
@@ -686,15 +687,13 @@ class ClimateBackendThermostat(PriceAwareThermostat):
                 self._lockout.heat_max is not None
                 and old.attributes.get("outdoor_heat_locked") is True
             )
-            self._lockout.cool_locked = (
-                self._lockout.cool_min is not None
-                and old.attributes.get("outdoor_cool_locked") is True
-            )
+            # Cooling stays locked until a valid reading (fail-closed).
+            self._lockout.cool_locked = self._lockout.cool_min is not None
             self._hold_restored_lock = self._lockout.heat_locked or self._lockout.cool_locked
         await super().async_added_to_hass()
 
     def _update_outdoor(self) -> None:
-        """Read the outdoor sensor and update the lockouts; faults fail open."""
+        """Read the outdoor sensor; faults release heating but lock cooling."""
         if self._outdoor_sensor is None:
             self._outdoor_c = None
             self._outdoor_status = "not_configured"
@@ -714,7 +713,8 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             status = "ok" if value is not None else "invalid"
         if status != "ok" and status != self._outdoor_status:
             _LOGGER.warning(
-                "Outdoor temperature sensor %s is %s; outdoor lockouts are released",
+                "Outdoor temperature sensor %s is %s; the heating lockout is released"
+                " and cooling is locked until a valid reading",
                 self._outdoor_sensor, status,
             )
         self._outdoor_status = status
@@ -723,6 +723,9 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             self._hold_restored_lock = False
         if not self._hold_restored_lock:
             self._lockout.update(value)
+        elif value is None and self._lockout.cool_min is not None:
+            # Cooling never runs without a valid reading, even while holding.
+            self._lockout.cool_locked = True
 
     def _outdoor_lockout(self) -> str:
         """The lockout affecting the wrapper's current direction (none/heat/cool).
@@ -870,6 +873,8 @@ class ClimateBackendThermostat(PriceAwareThermostat):
         self._demand_active = bool(wants)
         if not wants:
             return Intent("off", None, "no_demand")
+        # Remembered for heat_cool's changeover interval after a mode switch.
+        self._selector.last_active, self._selector.last_active_at = wanted, mono
         target: float | None = None
         if limits is not None:
             target = native_target(effective, self._compensation(wanted), limits)
@@ -1030,10 +1035,20 @@ class ClimateBackendThermostat(PriceAwareThermostat):
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Change the wrapper mode; a changed direction never reuses stale demand."""
         if hvac_mode in self._attr_hvac_modes and hvac_mode != self._attr_hvac_mode:
+            now = _monotonic()
+            running: AcMode = (
+                "heat" if self._attr_hvac_mode == HVACMode.HEAT
+                else "cool" if self._attr_hvac_mode == HVACMode.COOL else "off"
+            )
+            if hvac_mode == HVACMode.HEAT_COOL and self._demand_active and running != "off":
+                # Continue the running direction, so the changeover interval
+                # applies before the other one may start.
+                self._selector.resume(running, now)
+            else:
+                # The changeover memory is kept, so re-entering heat_cool cannot
+                # flip the direction faster than the changeover interval.
+                self._selector.stop(now)
             self._demand_active = False
-            # The changeover memory is kept, so re-entering heat_cool cannot
-            # flip the direction faster than the changeover interval.
-            self._selector.stop(_monotonic())
         await super().async_set_hvac_mode(hvac_mode)
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
@@ -1067,6 +1082,8 @@ class ClimateBackendThermostat(PriceAwareThermostat):
         if not (isfinite(low) and isfinite(high)) or not (
             self._attr_min_temp <= low and high <= self._attr_max_temp
         ):
+            # Publish the stored setpoints so a UI/HomeKit slider snaps back.
+            self.async_write_ha_state()
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="temperature_out_of_range",
@@ -1076,6 +1093,7 @@ class ClimateBackendThermostat(PriceAwareThermostat):
                 },
             )
         if high - low < self._gap - 1e-9:
+            self.async_write_ha_state()
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="range_too_narrow",
@@ -1178,5 +1196,12 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             "outdoor_lockout": self._outdoor_lockout(),
             "outdoor_heat_locked": self._lockout.heat_locked,
             "outdoor_cool_locked": self._lockout.cool_locked,
+            # Why cooling is locked: "temperature" (below the limit) or
+            # "no_valid_reading" (sensor missing, unavailable, stale or invalid).
+            "outdoor_cool_lock_cause": (
+                None if not self._lockout.cool_locked
+                else "temperature" if self._outdoor_status == "ok"
+                else "no_valid_reading"
+            ),
             "planned_heating": None,
         }

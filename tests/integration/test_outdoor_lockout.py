@@ -42,6 +42,8 @@ async def set_outdoor(hass: HomeAssistant, value: str, unit: str = "°C") -> Non
 # ------------------------------------------------------------------ pure logic
 def test_cool_lockout_engages_below_and_releases_above_hysteresis() -> None:
     lock = OutdoorLockout(cool_min=15.0, hysteresis=1.0)
+    assert lock.locks("cool")  # no reading yet: cooling fails closed
+    lock.update(16.0)
     lock.update(15.0)
     assert not lock.locks("cool")  # at the threshold cooling is allowed
     lock.update(14.9)
@@ -71,9 +73,10 @@ def test_missing_reading_and_disabled_thresholds_fail_open() -> None:
     lock.update(30.0)
     assert lock.heat_locked
     lock.update(None)
-    assert not lock.heat_locked and not lock.cool_locked
+    # Heating fails open; cooling fails closed (owner requirement).
+    assert not lock.heat_locked and lock.cool_locked
     lock.update(float("nan"))
-    assert not lock.heat_locked
+    assert not lock.heat_locked and lock.cool_locked
     disabled = OutdoorLockout()
     disabled.update(-30.0)
     disabled.update(40.0)

@@ -119,10 +119,16 @@ both configured, a cooling lockout never blocks heating. A restart after a
 lockout releases still waits for the restart pause.
 
 A missing, unavailable, non-numeric or stale (older than the maximum sensor age)
-outdoor reading **fails open**: nothing is locked, so a sensor fault never blocks
-heating. Attributes: `outdoor_temperature_c`, `outdoor_lockout` (`none`, `heat`
-or `cool`, for the current direction), `outdoor_heat_locked`,
-`outdoor_cool_locked` and `outdoor_sensor_status`. The switch type ignores
+outdoor reading is **asymmetric**. The heating lockout fails open, so a sensor
+fault never blocks heating. The cooling lockout fails closed: with a cooling
+limit set, cooling never starts (and a running cool is turned off through the
+normal command planner) until a valid reading is at or above the limit plus the
+hysteresis. This also holds at a fresh start before the first reading and after
+a restart with the pump already cooling. Attributes: `outdoor_temperature_c`,
+`outdoor_lockout` (`none`, `heat`, `cool`, or `both` in heat/cool, for the
+current direction), `outdoor_heat_locked`, `outdoor_cool_locked`,
+`outdoor_cool_lock_cause` (`temperature` or `no_valid_reading`) and
+`outdoor_sensor_status`. The switch type ignores
 these settings.
 
 ### Heat/cool mode (two setpoints)
@@ -158,7 +164,11 @@ cooling thresholds. With only one direction controlled nothing changes.
   idle with the pump off: it neither cools nor heats, and `pause_reason` is
   `outdoor_lockout`. A running direction stops when it becomes locked.
   `outdoor_lockout` reports `heat`, `cool` or `both`. An outdoor sensor fault
-  still fails open. An open window pauses both directions.
+  releases heating but locks cooling. An open window pauses both directions.
+  Switching into heat/cool while heat or cool is running continues that
+  direction, and recent single-mode running counts for the changeover time.
+  A rejected setpoint republishes the stored values, so the card or HomeKit
+  snaps back.
 - **Price.** Each setpoint is price-adjusted by the optimizer in its own
   direction, within ± maximum price deviation and the minimum/maximum: cheap
   now raises low (pre-heat) and lowers high (pre-cool); expensive now does the

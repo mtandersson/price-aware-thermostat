@@ -192,8 +192,10 @@ class OutdoorLockout:
     ``heat_max``. A ``None`` threshold disables that lockout. A lockout engages
     when the outdoor temperature crosses its threshold and releases only once
     it is ``hysteresis`` beyond the threshold on the allowed side. A missing
-    reading (``None``) fails open: both lockouts are released, so a sensor
-    fault never blocks heating.
+    reading (``None``) is asymmetric: heating fails open (a sensor fault
+    never blocks heating), while cooling fails closed whenever ``cool_min``
+    is set (cooling never starts without a valid reading above the limit).
+    Cooling also starts locked until the first valid reading.
     """
 
     cool_min: float | None = None
@@ -205,11 +207,13 @@ class OutdoorLockout:
     def __post_init__(self) -> None:
         if not isfinite(self.hysteresis) or self.hysteresis < 0:
             raise ValueError("Hysteresis must be a nonnegative number")
+        if self.cool_min is not None:
+            self.cool_locked = True
 
     def update(self, outdoor: float | None) -> None:
         """Feed one outdoor reading in Celsius (None = missing/stale/invalid)."""
         if outdoor is None or not isfinite(outdoor):
-            self.cool_locked = False
+            self.cool_locked = self.cool_min is not None
             self.heat_locked = False
             return
         if self.cool_min is None:
