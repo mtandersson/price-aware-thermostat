@@ -41,7 +41,11 @@
           "maximum_price_deviation": "Största prisjustering runt ditt mål (°C, standard 0,8; 0 stänger av prisjusteringen)",
           "window_contacts": "Fönster-/dörrkontakter (valfritt)",
           "window_open_delay_seconds": "Öppet längre än så pausar driften (sekunder)",
-          "window_close_delay_seconds": "Stängt minst så länge innan driften återupptas (sekunder)"
+          "window_close_delay_seconds": "Stängt minst så länge innan driften återupptas (sekunder)",
+          "outdoor_temperature_sensor": "Utetemperatursensor (valfri)",
+          "cool_min_outdoor_temperature": "Kyl bara när det är minst så här varmt ute (°C, valfri)",
+          "heat_max_outdoor_temperature": "Värm bara när det är högst så här varmt ute (°C, valfri)",
+          "outdoor_lockout_hysteresis": "Hysteres för utespärren (°C)"
         },
         "data_description": {
           "name": "Visningsnamn för den nya termostatentiteten. Exempel: Garagevärme.",
@@ -67,7 +71,11 @@
           "maximum_price_deviation": "Största prisjustering, ± °C runt ditt mål, för alla styrtyper; min/max gäller fortfarande. Exempel: 0,8 med mål 21 håller det inom 20,2–21,8 °C. 0 stänger av prisjusteringen.",
           "window_contacts": "Binära sensorer för fönster eller dörrar. När någon står öppen pausas värmepumpen; okända kontakter varken pausar eller återupptar den.",
           "window_open_delay_seconds": "En kontakt måste vara öppen så här många sekunder innan värmepumpen stängs av. Exempel: 120.",
-          "window_close_delay_seconds": "Alla kontakter måste vara stängda så här många sekunder innan driften återupptas. Exempel: 60."
+          "window_close_delay_seconds": "Alla kontakter måste vara stängda så här många sekunder innan driften återupptas. Exempel: 60.",
+          "outdoor_temperature_sensor": "Temperatursensor utomhus som används av de två spärrarna nedan. Saknas den, är den otillgänglig eller äldre än högsta sensorålder spärras ingenting.",
+          "cool_min_outdoor_temperature": "Kylning spärras så länge det är kallare än så här ute. Lämna tomt för att aldrig spärra kylning. Exempel: 15.",
+          "heat_max_outdoor_temperature": "Värme spärras så länge det är varmare än så här ute. Lämna tomt för att aldrig spärra värme. Exempel: 15.",
+          "outdoor_lockout_hysteresis": "En spärr släpps först när utetemperaturen är så här långt förbi gränsen på den tillåtna sidan. Exempel: 1,0 med värmegränsen 15 °C släpps vid 14 °C."
         }
       }
     },
@@ -84,7 +92,8 @@
       "invalid_hvac_modes": "Välj värme-/kyllägen som enheten stöder; den måste också stödja av.",
       "invalid_backend_limits": "Climate-entiteten måste stödja måltemperatur och rapportera ändliga, ordnade temperaturgränser och ett positivt steg.",
       "invalid_ac_settings": "Kompensationen måste ligga inom ±10 °C, omstartspausen 60–3600 sekunder, fönsterfördröjningarna 0–3600 sekunder och prisavvikelsen 0–20 °C.",
-      "invalid_window_sensor": "Fönster-/dörrkontakter måste vara binära sensorer."
+      "invalid_window_sensor": "Fönster-/dörrkontakter måste vara binära sensorer.",
+      "invalid_outdoor_sensor": "Utetemperatursensorn måste vara en sensor som rapporterar en temperatur i °C, °F eller K."
     },
     "abort": {
       "already_configured": "Det här ställdonet har redan en prisstyrd termostat.",
@@ -120,7 +129,11 @@
           "window_open_delay_seconds": "Öppet längre än så pausar driften (sekunder)",
           "window_close_delay_seconds": "Stängt minst så länge innan driften återupptas (sekunder)",
           "nordpool_config_entry": "Priskälla (Nord Pool-integrationen; kommande priser hämtas via dess åtgärd)",
-          "market_area": "Nord Pool-elområde (till exempel SE3)"
+          "market_area": "Nord Pool-elområde (till exempel SE3)",
+          "outdoor_temperature_sensor": "Utetemperatursensor (valfri)",
+          "cool_min_outdoor_temperature": "Kyl bara när det är minst så här varmt ute (°C, valfri)",
+          "heat_max_outdoor_temperature": "Värm bara när det är högst så här varmt ute (°C, valfri)",
+          "outdoor_lockout_hysteresis": "Hysteres för utespärren (°C)"
         },
         "data_description": {
           "base_temperature": "Ditt normala mål i °C. Prisjusteringen flyttar målet runt detta värde. Exempel: 6,0 för ett frostskyddat garage, 21 för ett vardagsrum.",
@@ -146,7 +159,11 @@
           "window_open_delay_seconds": "En kontakt måste vara öppen så här många sekunder innan värmepumpen stängs av. Exempel: 120.",
           "window_close_delay_seconds": "Alla kontakter måste vara stängda så här många sekunder innan driften återupptas. Exempel: 60.",
           "nordpool_config_entry": "Den officiella Nord Pool-integrationen som levererar elpriserna. Kan ändras även i live-läge, eftersom den aldrig styr enheten.",
-          "market_area": "Elområdet som läses från Nord Pool-källan, till exempel SE3 eller SE4. Det måste vara ett av områdena som är konfigurerade där."
+          "market_area": "Elområdet som läses från Nord Pool-källan, till exempel SE3 eller SE4. Det måste vara ett av områdena som är konfigurerade där.",
+          "outdoor_temperature_sensor": "Temperatursensor utomhus som används av de två spärrarna nedan. Saknas den, är den otillgänglig eller äldre än högsta sensorålder spärras ingenting.",
+          "cool_min_outdoor_temperature": "Kylning spärras så länge det är kallare än så här ute. Lämna tomt för att aldrig spärra kylning. Exempel: 15.",
+          "heat_max_outdoor_temperature": "Värme spärras så länge det är varmare än så här ute. Lämna tomt för att aldrig spärra värme. Exempel: 15.",
+          "outdoor_lockout_hysteresis": "En spärr släpps först när utetemperaturen är så här långt förbi gränsen på den tillåtna sidan. Exempel: 1,0 med värmegränsen 15 °C släpps vid 14 °C."
         }
       }
     },
@@ -162,7 +179,8 @@
       "invalid_backend_limits": "Climate-entiteten måste stödja måltemperatur och rapportera ändliga, ordnade temperaturgränser och ett positivt steg.",
       "actuator_handoff_required": "Innan ställdonet byts: spara skuggläge, kontrollera att den tidigare brytaren är av och behåll det nya ställdonet i skuggläge.",
       "invalid_ac_settings": "Kompensationen måste ligga inom ±10 °C, omstartspausen 60–3600 sekunder, fönsterfördröjningarna 0–3600 sekunder och prisavvikelsen 0–20 °C.",
-      "invalid_window_sensor": "Fönster-/dörrkontakter måste vara binära sensorer."
+      "invalid_window_sensor": "Fönster-/dörrkontakter måste vara binära sensorer.",
+      "invalid_outdoor_sensor": "Utetemperatursensorn måste vara en sensor som rapporterar en temperatur i °C, °F eller K."
     }
   },
   "selector": {

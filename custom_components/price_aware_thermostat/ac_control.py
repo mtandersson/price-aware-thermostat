@@ -184,6 +184,56 @@ class WindowGuard:
         return self.paused
 
 
+@dataclass
+class OutdoorLockout:
+    """Lock heating or cooling by outdoor temperature, with hysteresis.
+
+    Cooling is allowed only at or above ``cool_min``; heating only at or below
+    ``heat_max``. A ``None`` threshold disables that lockout. A lockout engages
+    when the outdoor temperature crosses its threshold and releases only once
+    it is ``hysteresis`` beyond the threshold on the allowed side. A missing
+    reading (``None``) fails open: both lockouts are released, so a sensor
+    fault never blocks heating.
+    """
+
+    cool_min: float | None = None
+    heat_max: float | None = None
+    hysteresis: float = 1.0
+    cool_locked: bool = False
+    heat_locked: bool = False
+
+    def __post_init__(self) -> None:
+        if not isfinite(self.hysteresis) or self.hysteresis < 0:
+            raise ValueError("Hysteresis must be a nonnegative number")
+
+    def update(self, outdoor: float | None) -> None:
+        """Feed one outdoor reading in Celsius (None = missing/stale/invalid)."""
+        if outdoor is None or not isfinite(outdoor):
+            self.cool_locked = False
+            self.heat_locked = False
+            return
+        if self.cool_min is None:
+            self.cool_locked = False
+        elif self.cool_locked:
+            self.cool_locked = outdoor < self.cool_min + self.hysteresis
+        else:
+            self.cool_locked = outdoor < self.cool_min
+        if self.heat_max is None:
+            self.heat_locked = False
+        elif self.heat_locked:
+            self.heat_locked = outdoor > self.heat_max - self.hysteresis
+        else:
+            self.heat_locked = outdoor > self.heat_max
+
+    def locks(self, mode: AcMode) -> bool:
+        """Whether the given direction is currently locked out."""
+        if mode == "heat":
+            return self.heat_locked
+        if mode == "cool":
+            return self.cool_locked
+        return False
+
+
 @dataclass(frozen=True)
 class Observation:
     """What the underlying climate currently reports."""

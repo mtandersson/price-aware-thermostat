@@ -38,6 +38,12 @@ Assistant instance.
 
 ### Added
 
+- Optional outdoor-temperature lockouts for the heat pump/AC type: an outdoor
+  sensor, "cool only when outdoor is at or above" and "heat only when outdoor is
+  at or below" limits, and a hysteresis (default 1.0 °C). A locked direction is
+  proposed as off while the wrapper mode is kept; a missing, unavailable or stale
+  outdoor sensor never locks. Absent settings mean disabled, so no migration.
+  See [docs/control-types.md](docs/control-types.md#outdoor-lockouts-optional).
 - Field help texts for every setup, reconfigure and options field, a
   [settings reference](docs/settings.md) with a worked price example, and a
   Swedish translation.

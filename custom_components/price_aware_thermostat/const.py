@@ -36,6 +36,12 @@ CONF_WINDOW_SENSORS: Final = "window_contacts"
 CONF_WINDOW_OPEN_DELAY: Final = "window_open_delay_seconds"
 CONF_WINDOW_CLOSE_DELAY: Final = "window_close_delay_seconds"
 CONF_MAX_DEVIATION: Final = "maximum_price_deviation"
+# Optional outdoor-temperature lockouts (climate backend). An absent or empty
+# sensor/threshold means the lockout is disabled, so no migration is needed.
+CONF_OUTDOOR_SENSOR: Final = "outdoor_temperature_sensor"
+CONF_COOL_MIN_OUTDOOR: Final = "cool_min_outdoor_temperature"
+CONF_HEAT_MAX_OUTDOOR: Final = "heat_max_outdoor_temperature"
+CONF_OUTDOOR_HYSTERESIS: Final = "outdoor_lockout_hysteresis"
 
 # Limits and deviation that applied before config entry minor version 2.
 # Migration pins these on entries that relied on the old defaults, so an
@@ -61,6 +67,7 @@ DEFAULTS: Final[dict[str, float | int | str | bool]] = {
     CONF_COOL_COMPENSATION: 0.0,
     CONF_WINDOW_OPEN_DELAY: 120,
     CONF_WINDOW_CLOSE_DELAY: 60,
+    CONF_OUTDOOR_HYSTERESIS: 1.0,
 }
 
 SETTINGS_URL: Final = (

@@ -22,9 +22,11 @@ from .const import (
     CONF_COLD_TOLERANCE,
     CONF_CONTROL_TYPE,
     CONF_COOL_COMPENSATION,
+    CONF_COOL_MIN_OUTDOOR,
     CONF_DEADBAND,
     CONF_FILTER,
     CONF_HEAT_COMPENSATION,
+    CONF_HEAT_MAX_OUTDOOR,
     CONF_HEATER,
     CONF_HOT_TOLERANCE,
     CONF_HVAC_MODES,
@@ -36,6 +38,8 @@ from .const import (
     CONF_MIN_TEMP,
     CONF_NAME,
     CONF_NORDPOOL_ENTRY,
+    CONF_OUTDOOR_HYSTERESIS,
+    CONF_OUTDOOR_SENSOR,
     CONF_SAFETY_ACK,
     CONF_SAFETY_ACK_AT,
     CONF_SENSITIVITY,
@@ -167,17 +171,33 @@ _AC_KEYS = (
     CONF_WINDOW_OPEN_DELAY,
     CONF_WINDOW_CLOSE_DELAY,
     CONF_HVAC_MODES,
+    CONF_OUTDOOR_SENSOR,
+    CONF_COOL_MIN_OUTDOOR,
+    CONF_HEAT_MAX_OUTDOOR,
+    CONF_OUTDOOR_HYSTERESIS,
 )
+
+# Clearable optional AC fields and the value that means "cleared".
+_CLEARABLE: dict[str, Any] = {
+    CONF_WINDOW_SENSORS: [],
+    CONF_OUTDOOR_SENSOR: None,
+    CONF_COOL_MIN_OUTDOOR: None,
+    CONF_HEAT_MAX_OUTDOOR: None,
+}
+
+
+def _suggested(initial: dict[str, Any], key: str) -> vol.Marker:
+    """An optional, clearable field prefilled with its current value."""
+    value = initial.get(key)
+    return vol.Optional(
+        key, description={"suggested_value": None if value in (None, [], "") else value}
+    )
 
 
 def _ac_schema(initial: dict[str, Any]) -> dict[vol.Marker, Any]:
     """Settings that only apply to the heat-pump/AC control type."""
     # Optional, clearable fields use a suggested value (UI prefill) rather than a
     # default: a default would silently refill a field the user emptied.
-    windows: vol.Marker = vol.Optional(
-        CONF_WINDOW_SENSORS,
-        description={"suggested_value": initial.get(CONF_WINDOW_SENSORS) or None},
-    )
     return {
         vol.Optional(
             CONF_HEAT_COMPENSATION,
@@ -187,7 +207,7 @@ def _ac_schema(initial: dict[str, Any]) -> dict[vol.Marker, Any]:
             CONF_COOL_COMPENSATION,
             default=initial.get(CONF_COOL_COMPENSATION, DEFAULTS[CONF_COOL_COMPENSATION]),
         ): _number(-10, 10, 0.5),
-        windows: selector.EntitySelector(
+        _suggested(initial, CONF_WINDOW_SENSORS): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="binary_sensor", multiple=True)
         ),
         vol.Optional(
@@ -198,6 +218,15 @@ def _ac_schema(initial: dict[str, Any]) -> dict[vol.Marker, Any]:
             CONF_WINDOW_CLOSE_DELAY,
             default=initial.get(CONF_WINDOW_CLOSE_DELAY, DEFAULTS[CONF_WINDOW_CLOSE_DELAY]),
         ): _number(0, 3600, 15),
+        _suggested(initial, CONF_OUTDOOR_SENSOR): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+        ),
+        _suggested(initial, CONF_COOL_MIN_OUTDOOR): _number(-40, 40, 0.5),
+        _suggested(initial, CONF_HEAT_MAX_OUTDOOR): _number(-40, 40, 0.5),
+        vol.Optional(
+            CONF_OUTDOOR_HYSTERESIS,
+            default=initial.get(CONF_OUTDOOR_HYSTERESIS, DEFAULTS[CONF_OUTDOOR_HYSTERESIS]),
+        ): _number(0, 10, 0.1),
     }
 
 
@@ -389,8 +418,9 @@ class PriceAwareThermostatOptionsFlow(OptionsFlowWithReload):
                 if climate_backend:
                     # An omitted optional field means "cleared"; write it explicitly so
                     # a value saved at setup (in entry data) cannot silently persist.
-                    if CONF_WINDOW_SENSORS not in user_input:
-                        updated[CONF_WINDOW_SENSORS] = []
+                    for key, cleared in _CLEARABLE.items():
+                        if key not in user_input:
+                            updated[key] = cleared
                 if updated.get(CONF_HEATER, values.get(CONF_HEATER)) != values.get(CONF_HEATER):
                     # Entry/entity identity remains stable; actuator deduplication
                     # must follow a deliberately changed physical target.
