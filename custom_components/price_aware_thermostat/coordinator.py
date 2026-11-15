@@ -7,9 +7,15 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import (
+    SIGNAL_CONFIG_ENTRY_CHANGED,
+    ConfigEntry,
+    ConfigEntryChange,
+)
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
@@ -215,6 +221,21 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
             )
         )
 
+    @callback
+    def async_watch_price_source(self) -> CALLBACK_TYPE:
+        """Raise the source repair as soon as the Nord Pool entry is removed.
+
+        Without this, removal is only noticed at the next price refresh.
+        Cached prices stay in use either way; this only makes the repair prompt.
+        """
+
+        @callback
+        def _changed(change: ConfigEntryChange, changed: ConfigEntry) -> None:
+            if change is ConfigEntryChange.REMOVED and changed.entry_id == self._source_entry_id:
+                self._check_price_source()
+
+        return async_dispatcher_connect(self.hass, SIGNAL_CONFIG_ENTRY_CHANGED, _changed)
+
     def _check_price_source(self) -> None:
         """Surface deleted/misconfigured sources without stopping local control.
 
@@ -237,4 +258,9 @@ class NordPoolPriceCoordinator(DataUpdateCoordinator[tuple[PriceInterval, ...]])
             is_fixable=False,
             severity=ir.IssueSeverity.WARNING,
             translation_key="invalid_price_source",
+            translation_placeholders={
+                "name": self._entry.title,
+                "area": self._area,
+                "source": source.title if source is not None else self._source_entry_id,
+            },
         )

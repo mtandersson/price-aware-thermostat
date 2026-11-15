@@ -4,8 +4,10 @@ from datetime import datetime
 from unittest.mock import patch
 
 import pytest
+from homeassistant.config_entries import SIGNAL_CONFIG_ENTRY_CHANGED, ConfigEntryChange
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from pytest_homeassistant.common import MockConfigEntry, async_mock_service
 
 from custom_components.price_aware_thermostat.const import (
@@ -126,3 +128,57 @@ async def test_source_repair_survives_reload_and_clears_after_reconfigure(
     assert registry.async_get_issue(DOMAIN, issue_id) is None
     assert not any(calls)
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_two_entries_get_distinct_named_repairs(hass: HomeAssistant) -> None:
+    """Each repair names its thermostat, area and source in the translated title."""
+    from homeassistant.helpers.translation import async_get_translations
+
+    entries = [MockConfigEntry(domain=DOMAIN, title=title,
+               data={CONF_NORDPOOL_ENTRY: "gone", CONF_AREA: area})
+               for title, area in (("Garage", "SE3"), ("Cellar", "SE4"))]
+    for entry in entries:
+        entry.add_to_hass(hass)
+        NordPoolPriceCoordinator(hass, entry)._check_price_source()
+    registry = ir.async_get(hass)
+    issues = [registry.async_get_issue(DOMAIN, f"price_source_{e.entry_id}") for e in entries]
+    assert [i.translation_placeholders for i in issues] == [
+        {"name": "Garage", "area": "SE3", "source": "gone"},
+        {"name": "Cellar", "area": "SE4", "source": "gone"},
+    ]
+    for language in ("en", "sv"):
+        strings = await async_get_translations(hass, language, "issues", [DOMAIN])
+        prefix = f"component.{DOMAIN}.issues.invalid_price_source"
+        titles = [strings[f"{prefix}.title"].format(**i.translation_placeholders) for i in issues]
+        assert "Garage" in titles[0] and "Cellar" in titles[1]
+        description = strings[f"{prefix}.description"].format(**issues[1].translation_placeholders)
+        assert "Cellar" in description and "SE4" in description
+
+
+async def test_source_removal_raises_repair_immediately(hass: HomeAssistant) -> None:
+    source = MockConfigEntry(domain="nordpool", title="Nord Pool", data={"areas": ["SE4"]})
+    source.add_to_hass(hass)
+    other = MockConfigEntry(domain="nordpool", data={"areas": ["SE4"]})
+    other.add_to_hass(hass)
+    entry = MockConfigEntry(domain=DOMAIN, title="Attic",
+                            data={CONF_NORDPOOL_ENTRY: source.entry_id, CONF_AREA: "SE4"})
+    entry.add_to_hass(hass)
+    coordinator = NordPoolPriceCoordinator(hass, entry)
+    unsubscribe = coordinator.async_watch_price_source()
+    registry = ir.async_get(hass)
+    issue_id = f"price_source_{entry.entry_id}"
+    # HA dispatches this signal from ConfigEntries.async_remove; sending it
+    # directly avoids loading the real nordpool integration and its library.
+    for removed in (other, source):
+        async_dispatcher_send(hass, SIGNAL_CONFIG_ENTRY_CHANGED,
+                              ConfigEntryChange.UPDATED, source)
+        hass.config_entries._entries.pop(removed.entry_id)
+        async_dispatcher_send(hass, SIGNAL_CONFIG_ENTRY_CHANGED,
+                              ConfigEntryChange.REMOVED, removed)
+        await hass.async_block_till_done()
+        if removed is other:
+            assert registry.async_get_issue(DOMAIN, issue_id) is None
+    issue = registry.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.translation_placeholders["name"] == "Attic"
+    unsubscribe()
