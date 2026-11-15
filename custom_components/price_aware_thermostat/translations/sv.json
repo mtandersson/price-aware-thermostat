@@ -204,8 +204,8 @@
   },
   "issues": {
     "invalid_price_source": {
-      "title": "Den valda Nord Pool-källan behöver åtgärdas",
-      "description": "Den valda Nord Pool-konfigurationen har tagits bort eller levererar inte längre det konfigurerade elområdet. Kontrollera den officiella Nord Pool-integrationen under Inställningar → Enheter och tjänster. Välj sedan en befintlig Nord Pool-konfiguration och ett av dess områden, antingen med Omkonfigurera eller i termostatens alternativ. Båda fungerar även i live-läge; skuggläge krävs inte. Cachade priser kan användas tills de går ut; utan användbara priser använder termostaten sitt grundmål. Ärendet försvinner vid nästa prisuppdatering efter att källan rättats. Ändra inte vem som äger den fysiska enheten för att åtgärda en priskälla."
+      "title": "Nord Pool-källan för {name} behöver åtgärdas",
+      "description": "Termostat **{name}**: den valda Nord Pool-konfigurationen ({source}) har tagits bort eller levererar inte längre elområde {area}. Kontrollera den officiella Nord Pool-integrationen under Inställningar → Enheter och tjänster. Välj sedan en befintlig Nord Pool-konfiguration och ett av dess områden, antingen med Omkonfigurera eller i termostatens alternativ. Båda fungerar även i live-läge; skuggläge krävs inte. Cachade priser kan användas tills de går ut; utan användbara priser använder termostaten sitt grundmål. Ärendet försvinner vid nästa prisuppdatering efter att källan rättats. Ändra inte vem som äger den fysiska enheten för att åtgärda en priskälla."
     }
   },
   "entity": {

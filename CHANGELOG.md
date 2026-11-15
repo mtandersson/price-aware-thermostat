@@ -28,6 +28,11 @@ Assistant instance.
 
 ### Fixed
 
+- The "Nord Pool source needs attention" repair now names the affected
+  thermostat, market area and source in its title and description, so several
+  thermostat entries can be told apart (#42). The issue ID is unchanged, so
+  existing and ignored repairs keep working. Removing the Nord Pool config
+  entry now raises the repair at once instead of at the next price refresh.
 - A climate entity whose registry name was customised kept its friendly name
   after the per-entry device was added, instead of becoming
   "<entry title> <custom name>" (#46). Config entry migration to 2.3 moves the
