@@ -144,7 +144,7 @@ class PriceAwareThermostat(RestoreClimate):
     _attr_hvac_modes = [HVACMode.HEAT, HVACMode.OFF]
     _attr_preset_modes = [PRESET_PRICE_AWARE, PRESET_FIXED]
     _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_native_target_temperature_step = 0.1
+    _attr_target_temperature_step = 0.1
 
     def __init__(
         self, entry: PriceAwareConfigEntry, coordinator: NordPoolPriceCoordinator
