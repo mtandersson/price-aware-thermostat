@@ -45,7 +45,9 @@
           "outdoor_temperature_sensor": "Utetemperatursensor (valfri)",
           "cool_min_outdoor_temperature": "Kyl bara när det är minst så här varmt ute (°C, valfri)",
           "heat_max_outdoor_temperature": "Värm bara när det är högst så här varmt ute (°C, valfri)",
-          "outdoor_lockout_hysteresis": "Hysteres för utespärren (°C)"
+          "outdoor_lockout_hysteresis": "Hysteres för utespärren (°C)",
+          "heat_cool_min_gap": "Minsta avstånd mellan värme- och kylmål (°C)",
+          "heat_cool_changeover_minutes": "Minsta tid mellan växling värme/kyla (minuter)"
         },
         "data_description": {
           "name": "Visningsnamn för den nya termostatentiteten. Exempel: Garagevärme.",
@@ -75,7 +77,9 @@
           "outdoor_temperature_sensor": "Temperatursensor utomhus som används av de två spärrarna nedan. Saknas den, är den otillgänglig eller äldre än högsta sensorålder spärras ingenting.",
           "cool_min_outdoor_temperature": "Kylning spärras så länge det är kallare än så här ute. Lämna tomt för att aldrig spärra kylning. Exempel: 15.",
           "heat_max_outdoor_temperature": "Värme spärras så länge det är varmare än så här ute. Lämna tomt för att aldrig spärra värme. Exempel: 15.",
-          "outdoor_lockout_hysteresis": "En spärr släpps först när utetemperaturen är så här långt förbi gränsen på den tillåtna sidan. Exempel: 1,0 med värmegränsen 15 °C släpps vid 14 °C."
+          "outdoor_lockout_hysteresis": "En spärr släpps först när utetemperaturen är så här långt förbi gränsen på den tillåtna sidan. Exempel: 1,0 med värmegränsen 15 °C släpps vid 14 °C.",
+          "heat_cool_min_gap": "Används bara när både värme och kyla styrs (läget värme/kyla). Kylmålet måste ligga minst så här mycket över värmemålet, och prisjusteringen gör aldrig intervallet smalare. Exempel: 1,0 tillåter 22/23 °C men inte 22/22,5 °C.",
+          "heat_cool_changeover_minutes": "I läget värme/kyla: hur länge efter att värmen senast gick som kylan får starta, och tvärtom. Rummet måste också passera intervallet mellan målen. Exempel: 30 hindrar pendling mellan värme och kyla."
         }
       }
     },
@@ -133,7 +137,9 @@
           "outdoor_temperature_sensor": "Utetemperatursensor (valfri)",
           "cool_min_outdoor_temperature": "Kyl bara när det är minst så här varmt ute (°C, valfri)",
           "heat_max_outdoor_temperature": "Värm bara när det är högst så här varmt ute (°C, valfri)",
-          "outdoor_lockout_hysteresis": "Hysteres för utespärren (°C)"
+          "outdoor_lockout_hysteresis": "Hysteres för utespärren (°C)",
+          "heat_cool_min_gap": "Minsta avstånd mellan värme- och kylmål (°C)",
+          "heat_cool_changeover_minutes": "Minsta tid mellan växling värme/kyla (minuter)"
         },
         "data_description": {
           "base_temperature": "Ditt normala mål i °C. Prisjusteringen flyttar målet runt detta värde. Exempel: 6,0 för ett frostskyddat garage, 21 för ett vardagsrum.",
@@ -163,7 +169,9 @@
           "outdoor_temperature_sensor": "Temperatursensor utomhus som används av de två spärrarna nedan. Saknas den, är den otillgänglig eller äldre än högsta sensorålder spärras ingenting.",
           "cool_min_outdoor_temperature": "Kylning spärras så länge det är kallare än så här ute. Lämna tomt för att aldrig spärra kylning. Exempel: 15.",
           "heat_max_outdoor_temperature": "Värme spärras så länge det är varmare än så här ute. Lämna tomt för att aldrig spärra värme. Exempel: 15.",
-          "outdoor_lockout_hysteresis": "En spärr släpps först när utetemperaturen är så här långt förbi gränsen på den tillåtna sidan. Exempel: 1,0 med värmegränsen 15 °C släpps vid 14 °C."
+          "outdoor_lockout_hysteresis": "En spärr släpps först när utetemperaturen är så här långt förbi gränsen på den tillåtna sidan. Exempel: 1,0 med värmegränsen 15 °C släpps vid 14 °C.",
+          "heat_cool_min_gap": "Används bara när både värme och kyla styrs (läget värme/kyla). Kylmålet måste ligga minst så här mycket över värmemålet, och prisjusteringen gör aldrig intervallet smalare. Exempel: 1,0 tillåter 22/23 °C men inte 22/22,5 °C.",
+          "heat_cool_changeover_minutes": "I läget värme/kyla: hur länge efter att värmen senast gick som kylan får starta, och tvärtom. Rummet måste också passera intervallet mellan målen. Exempel: 30 hindrar pendling mellan värme och kyla."
         }
       }
     },
@@ -200,6 +208,9 @@
     },
     "unsupported_preset_mode": {
       "message": "Förinställningen {preset_mode} stöds inte av den här termostaten."
+    },
+    "range_too_narrow": {
+      "message": "Kylmålet måste ligga minst {gap} grader över värmemålet."
     }
   },
   "issues": {

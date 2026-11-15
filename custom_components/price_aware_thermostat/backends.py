@@ -11,15 +11,19 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
 from .const import (
+    CONF_CHANGEOVER_MINUTES,
     CONF_CONTROL_TYPE,
     CONF_COOL_COMPENSATION,
     CONF_COOL_MIN_OUTDOOR,
     CONF_HEAT_COMPENSATION,
+    CONF_HEAT_COOL_GAP,
     CONF_HEAT_MAX_OUTDOOR,
     CONF_HEATER,
     CONF_HVAC_MODES,
     CONF_MAX_DEVIATION,
+    CONF_MAX_TEMP,
     CONF_MIN_CYCLE,
+    CONF_MIN_TEMP,
     CONF_OUTDOOR_HYSTERESIS,
     CONF_OUTDOOR_SENSOR,
     CONF_SENSOR,
@@ -28,6 +32,7 @@ from .const import (
     CONF_WINDOW_SENSORS,
     CONTROL_CLIMATE,
     CONTROL_SWITCH,
+    DEFAULTS,
     DOMAIN,
 )
 from .control import parse_temperature_celsius
@@ -108,6 +113,19 @@ def validate_ac_settings(settings: dict[str, Any]) -> str | None:
     hysteresis = number(CONF_OUTDOOR_HYSTERESIS, 1.0)
     if hysteresis is None or not 0 <= hysteresis <= 10:
         return "invalid_ac_settings"
+    gap = number(CONF_HEAT_COOL_GAP, 1.0)
+    if gap is None or not 0.1 <= gap <= 10:
+        return "invalid_ac_settings"
+    changeover = number(CONF_CHANGEOVER_MINUTES, 30.0)
+    if changeover is None or not 0 <= changeover <= 240:
+        return "invalid_ac_settings"
+    modes = settings.get(CONF_HVAC_MODES)
+    if isinstance(modes, list) and {"heat", "cool"} <= set(modes):
+        # heat_cool needs room for two setpoints at least the gap apart.
+        minimum = number(CONF_MIN_TEMP, float(DEFAULTS[CONF_MIN_TEMP]))
+        maximum = number(CONF_MAX_TEMP, float(DEFAULTS[CONF_MAX_TEMP]))
+        if minimum is None or maximum is None or maximum - minimum < gap:
+            return "invalid_ac_settings"
     contacts = settings.get(CONF_WINDOW_SENSORS, [])
     if not isinstance(contacts, list) or any(
         not isinstance(c, str) or not c.startswith("binary_sensor.") for c in contacts

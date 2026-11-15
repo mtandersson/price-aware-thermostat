@@ -91,4 +91,5 @@ def test_every_translation_key_in_code_exists_in_strings() -> None:
             "max_temp",
             "hvac_mode",
             "preset_mode",
+            "gap",
         }

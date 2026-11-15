@@ -45,7 +45,9 @@
           "outdoor_temperature_sensor": "Outdoor temperature sensor (optional)",
           "cool_min_outdoor_temperature": "Cool only when outdoor is at or above (\u00b0C, optional)",
           "heat_max_outdoor_temperature": "Heat only when outdoor is at or below (\u00b0C, optional)",
-          "outdoor_lockout_hysteresis": "Outdoor lockout hysteresis (\u00b0C)"
+          "outdoor_lockout_hysteresis": "Outdoor lockout hysteresis (\u00b0C)",
+          "heat_cool_min_gap": "Minimum gap between heat and cool targets (\u00b0C)",
+          "heat_cool_changeover_minutes": "Minimum time between heat/cool changeover (minutes)"
         },
         "data_description": {
           "name": "Display name of the new thermostat entity. Example: Garage heater.",
@@ -75,7 +77,9 @@
           "outdoor_temperature_sensor": "Temperature sensor outdoors, used by the two lockouts below. If it is missing, unavailable or older than the maximum sensor age, nothing is locked.",
           "cool_min_outdoor_temperature": "Cooling is blocked while it is colder outside than this. Leave empty to never block cooling. Example: 15.",
           "heat_max_outdoor_temperature": "Heating is blocked while it is warmer outside than this. Leave empty to never block heating. Example: 15.",
-          "outdoor_lockout_hysteresis": "A lockout is released only once the outdoor temperature is this far past the limit on the allowed side. Example: 1.0 with a 15 \u00b0C heating limit releases at 14 \u00b0C."
+          "outdoor_lockout_hysteresis": "A lockout is released only once the outdoor temperature is this far past the limit on the allowed side. Example: 1.0 with a 15 \u00b0C heating limit releases at 14 \u00b0C.",
+          "heat_cool_min_gap": "Only used when both heat and cool are controlled (heat/cool mode). The cooling target must be at least this much above the heating target, and price adjustment never narrows the range below it. Example: 1.0 allows 22/23 \u00b0C but not 22/22.5 \u00b0C.",
+          "heat_cool_changeover_minutes": "In heat/cool mode, how long after heating last ran before cooling may start, and the reverse. The room must also pass through the range between the targets. Example: 30 prevents flip-flopping between heating and cooling."
         }
       }
     },
@@ -133,7 +137,9 @@
           "outdoor_temperature_sensor": "Outdoor temperature sensor (optional)",
           "cool_min_outdoor_temperature": "Cool only when outdoor is at or above (\u00b0C, optional)",
           "heat_max_outdoor_temperature": "Heat only when outdoor is at or below (\u00b0C, optional)",
-          "outdoor_lockout_hysteresis": "Outdoor lockout hysteresis (\u00b0C)"
+          "outdoor_lockout_hysteresis": "Outdoor lockout hysteresis (\u00b0C)",
+          "heat_cool_min_gap": "Minimum gap between heat and cool targets (\u00b0C)",
+          "heat_cool_changeover_minutes": "Minimum time between heat/cool changeover (minutes)"
         },
         "data_description": {
           "base_temperature": "Your normal target in \u00b0C. Price adjustment moves the target around this value. Example: 6.0 for a frost-protected garage, 21 for a living room.",
@@ -163,7 +169,9 @@
           "outdoor_temperature_sensor": "Temperature sensor outdoors, used by the two lockouts below. If it is missing, unavailable or older than the maximum sensor age, nothing is locked.",
           "cool_min_outdoor_temperature": "Cooling is blocked while it is colder outside than this. Leave empty to never block cooling. Example: 15.",
           "heat_max_outdoor_temperature": "Heating is blocked while it is warmer outside than this. Leave empty to never block heating. Example: 15.",
-          "outdoor_lockout_hysteresis": "A lockout is released only once the outdoor temperature is this far past the limit on the allowed side. Example: 1.0 with a 15 \u00b0C heating limit releases at 14 \u00b0C."
+          "outdoor_lockout_hysteresis": "A lockout is released only once the outdoor temperature is this far past the limit on the allowed side. Example: 1.0 with a 15 \u00b0C heating limit releases at 14 \u00b0C.",
+          "heat_cool_min_gap": "Only used when both heat and cool are controlled (heat/cool mode). The cooling target must be at least this much above the heating target, and price adjustment never narrows the range below it. Example: 1.0 allows 22/23 \u00b0C but not 22/22.5 \u00b0C.",
+          "heat_cool_changeover_minutes": "In heat/cool mode, how long after heating last ran before cooling may start, and the reverse. The room must also pass through the range between the targets. Example: 30 prevents flip-flopping between heating and cooling."
         }
       }
     },
@@ -200,6 +208,9 @@
     },
     "unsupported_preset_mode": {
       "message": "The preset {preset_mode} is not supported by this thermostat."
+    },
+    "range_too_narrow": {
+      "message": "The cooling target must be at least {gap} degrees above the heating target."
     }
   },
   "issues": {

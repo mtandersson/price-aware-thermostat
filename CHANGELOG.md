@@ -10,6 +10,34 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Heat/cool mode (`heat_cool`) for the heat pump/AC type when both heat and cool
+  are controlled: a low (heat) and high (cool) setpoint on one card, with the
+  direction picked automatically. Defaults low = base target, high = base + 2
+  (22/24 °C for base 22). New options: minimum gap between the targets (default
+  1.0 °C) and minimum heat/cool changeover time (default 30 min). Outdoor
+  lockouts and window pauses apply per direction, and a hot room with cooling
+  locked stays idle. Price adjustment moves both setpoints without narrowing the
+  range below the gap. Existing heat, cool and off modes and the switch type are
+  unchanged. See [docs/control-types.md](docs/control-types.md#heatcool-mode-two-setpoints).
+
+  **Upgrade notes:**
+  - Existing heat pump/AC entries with both heat and cool gain the `heat_cool`
+    mode and the target-range feature automatically. HomeKit may show the new
+    Auto mode only after the HomeKit bridge is reloaded or the accessory reset.
+  - For entries with both modes, the options now also require maximum minus
+    minimum temperature to be at least the minimum gap (1.0 °C by default).
+
+### Changed
+
+- **Outdoor cooling lockout now fails closed** (heat pump/AC, all modes). With a
+  cooling limit set, a missing, unavailable, stale or invalid outdoor reading
+  locks cooling, including at start-up before the first reading and for a pump
+  found cooling after a restart; it is released only by a valid reading at or
+  above the limit plus the hysteresis. Heating still fails open. New attribute
+  `outdoor_cool_lock_cause`. Limits are ignored when no outdoor sensor is set.
+
 `0.2.0` in `manifest.json` is only a placeholder version, not a release: no tag
 or GitHub release exists. The entries below reflect `main`. Open before any
 release: HACS validation of the selected installation commit and an install/upgrade/remove/rollback test in a disposable Home

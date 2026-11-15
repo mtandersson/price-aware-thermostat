@@ -10,6 +10,9 @@ from math import isfinite
 from typing import Any, Literal
 
 from homeassistant.components.climate import (
+    ATTR_HVAC_MODE,
+    ATTR_TARGET_TEMP_HIGH,
+    ATTR_TARGET_TEMP_LOW,
     ATTR_TEMPERATURE,
     ClimateEntityFeature,
     HVACAction,
@@ -39,7 +42,9 @@ from .ac_control import (
     Observation,
     OutdoorLockout,
     Plan,
+    RangeSelector,
     WindowGuard,
+    adjust_range,
     aggregate_contacts,
     demand,
     native_target,
@@ -49,12 +54,14 @@ from .backends import backend_from_settings
 from .config_entry import PriceAwareConfigEntry
 from .const import (
     CONF_BASE_TEMP,
+    CONF_CHANGEOVER_MINUTES,
     CONF_COLD_TOLERANCE,
     CONF_COOL_COMPENSATION,
     CONF_COOL_MIN_OUTDOOR,
     CONF_DEADBAND,
     CONF_FILTER,
     CONF_HEAT_COMPENSATION,
+    CONF_HEAT_COOL_GAP,
     CONF_HEAT_MAX_OUTDOOR,
     CONF_HOT_TOLERANCE,
     CONF_LOOKAHEAD,
@@ -68,10 +75,14 @@ from .const import (
     CONF_SENSITIVITY,
     CONF_SENSOR,
     CONF_SHADOW,
+    CONF_TARGET_HIGH,
+    CONF_TARGET_LOW,
     CONF_WINDOW_CLOSE_DELAY,
     CONF_WINDOW_OPEN_DELAY,
     CONF_WINDOW_SENSORS,
     CONTROL_CLIMATE,
+    DEFAULT_HIGH_OFFSET,
+    DEFAULT_LOW_OFFSET,
     DEFAULTS,
     DOMAIN,
 )
@@ -185,8 +196,14 @@ class PriceAwareThermostat(RestoreClimate):
         configured = self._attr_native_target_temperature
         return configured if configured is not None else float(DEFAULTS[CONF_BASE_TEMP])
 
-    def _calculate(self) -> OptimizationResult:
-        """Calculate an effective temperature; errors never actuate a heater."""
+    def _calculate(
+        self, base: float | None = None, mode: Literal["heat", "cool"] | None = None
+    ) -> OptimizationResult:
+        """Calculate an effective temperature; errors never actuate a heater.
+
+        ``base``/``mode`` default to the base target and the wrapper's direction;
+        heat_cool passes each setpoint with its own direction.
+        """
         settings = {**self._entry.data, **self._entry.options}
         raw_filter = settings.get(CONF_FILTER, DEFAULTS[CONF_FILTER])
         if raw_filter == "rectangle":
@@ -196,7 +213,7 @@ class PriceAwareThermostat(RestoreClimate):
         else:
             raise ValueError("Unsupported price filter")
         config = OptimizerConfig(
-            base_temperature=self._base_target,
+            base_temperature=self._base_target if base is None else base,
             minimum_temperature=self._attr_min_temp,
             maximum_temperature=self._attr_max_temp,
             lookahead_minutes=int(settings.get(CONF_LOOKAHEAD, DEFAULTS[CONF_LOOKAHEAD])),
@@ -207,7 +224,7 @@ class PriceAwareThermostat(RestoreClimate):
             sensitivity_c_per_sek_per_kwh=float(
                 settings.get(CONF_SENSITIVITY, DEFAULTS[CONF_SENSITIVITY])
             ),
-            hvac_mode=self._optimizer_mode(),
+            hvac_mode=self._optimizer_mode() if mode is None else mode,
             max_deviation_c=self._max_deviation(),
         )
         return optimize(dt_util.utcnow(), self._coordinator.data or (), config)
@@ -224,14 +241,16 @@ class PriceAwareThermostat(RestoreClimate):
         value = {**self._entry.data, **self._entry.options}.get(CONF_MAX_DEVIATION)
         return float(DEFAULTS[CONF_MAX_DEVIATION] if value is None else value)
 
-    def _safe_calculate(self) -> OptimizationResult:
+    def _safe_calculate(
+        self, base: float | None = None, mode: Literal["heat", "cool"] | None = None
+    ) -> OptimizationResult:
         """Calculate the price-adjusted target, falling back to the base target."""
         try:
-            return self._calculate()
+            return self._calculate(base, mode)
         except ValueError:
             _LOGGER.warning("Invalid price data; using the configured base temperature")
             return OptimizationResult(
-                effective_target_c=self._base_target,
+                effective_target_c=self._base_target if base is None else base,
                 reason="price_unavailable",
                 current_price_sek_per_kwh=None,
                 future_weighted_price_sek_per_kwh=None,
@@ -557,8 +576,9 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             return None if value is None or isinstance(value, bool) else float(value)
 
         self._lockout = OutdoorLockout(
-            cool_min=threshold(CONF_COOL_MIN_OUTDOOR),
-            heat_max=threshold(CONF_HEAT_MAX_OUTDOOR),
+            # Without a sensor the thresholds have no meaning and are disabled.
+            cool_min=threshold(CONF_COOL_MIN_OUTDOOR) if self._outdoor_sensor else None,
+            heat_max=threshold(CONF_HEAT_MAX_OUTDOOR) if self._outdoor_sensor else None,
             hysteresis=float(
                 settings.get(CONF_OUTDOOR_HYSTERESIS, DEFAULTS[CONF_OUTDOOR_HYSTERESIS])
             ),
@@ -568,6 +588,88 @@ class ClimateBackendThermostat(PriceAwareThermostat):
         # A restored lock is held until the first valid reading or the startup
         # grace period, so a sensor that loads late cannot release it.
         self._hold_restored_lock = False
+        # Dual-setpoint heat_cool: only when both directions are controlled.
+        self._heat_cool = {"heat", "cool"} <= set(self._backend.configured_modes)
+        self._gap = float(settings.get(CONF_HEAT_COOL_GAP, DEFAULTS[CONF_HEAT_COOL_GAP]))
+        self._selector = RangeSelector(
+            changeover=60.0
+            * float(settings.get(CONF_CHANGEOVER_MINUTES, DEFAULTS[CONF_CHANGEOVER_MINUTES]))
+        )
+        self._range_results: tuple[OptimizationResult, OptimizationResult] | None = None
+        self._effective_range: tuple[float, float] | None = None
+        self._range_clamped = False
+        if self._heat_cool:
+            self._attr_hvac_modes = [
+                HVACMode.HEAT, HVACMode.COOL, HVACMode.HEAT_COOL, HVACMode.OFF
+            ]
+            self._attr_supported_features = (
+                ClimateEntityFeature.TARGET_TEMPERATURE
+                | ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
+                | ClimateEntityFeature.PRESET_MODE
+            )
+            low, high = self._initial_range(settings)
+            self._attr_native_target_temperature_low = low
+            self._attr_native_target_temperature_high = high
+
+    # -- heat_cool range -------------------------------------------------------
+    def _valid_range(self, low: float, high: float) -> bool:
+        return (
+            isfinite(low) and isfinite(high)
+            and self._attr_min_temp <= low and high <= self._attr_max_temp
+            and high - low >= self._gap - 1e-9
+        )
+
+    def _initial_range(self, settings: dict[str, Any]) -> tuple[float, float]:
+        """The stored range, or base/base + 2 clamped to the limits and gap."""
+        stored_low, stored_high = settings.get(CONF_TARGET_LOW), settings.get(CONF_TARGET_HIGH)
+        if isinstance(stored_low, (int, float)) and isinstance(stored_high, (int, float)):
+            low, high = float(stored_low), float(stored_high)
+            if self._valid_range(low, high):
+                return low, high
+        minimum, maximum = self._attr_min_temp, self._attr_max_temp
+        base = self._base_target
+        low = min(maximum, max(minimum, base + DEFAULT_LOW_OFFSET))
+        high = min(maximum, max(minimum, base + DEFAULT_HIGH_OFFSET))
+        if high - low < self._gap:
+            high = min(maximum, low + self._gap)
+            low = max(minimum, high - self._gap)
+        return low, high
+
+    @property
+    def _range(self) -> tuple[float, float]:
+        low = self._attr_native_target_temperature_low
+        high = self._attr_native_target_temperature_high
+        assert low is not None and high is not None
+        return low, high
+
+    @property
+    def native_target_temperature(self) -> float | None:
+        """No single target in heat_cool: the cards then show the two setpoints."""
+        if self._attr_hvac_mode == HVACMode.HEAT_COOL:
+            return None
+        return self._attr_native_target_temperature
+
+    @property
+    def native_target_temperature_low(self) -> float | None:
+        return self._range[0] if self._attr_hvac_mode == HVACMode.HEAT_COOL else None
+
+    @property
+    def native_target_temperature_high(self) -> float | None:
+        return self._range[1] if self._attr_hvac_mode == HVACMode.HEAT_COOL else None
+
+    def _calculate_range(self) -> None:
+        """Price-adjust both setpoints in their comfort-preserving direction."""
+        low, high = self._range
+        heat = self._safe_calculate(low, "heat")
+        cool = self._safe_calculate(high, "cool")
+        self._range_results = (heat, cool)
+        if self._attr_preset_mode != PRESET_PRICE_AWARE:
+            self._effective_range, self._range_clamped = (low, high), False
+            return
+        eff_low, eff_high, clamped = adjust_range(
+            low, high, heat.effective_target_c, cool.effective_target_c, self._gap
+        )
+        self._effective_range, self._range_clamped = (eff_low, eff_high), clamped
 
     # -- hooks used by the shared optimizer code -------------------------------
     def _optimizer_mode(self) -> Literal["heat", "cool"]:
@@ -585,15 +687,13 @@ class ClimateBackendThermostat(PriceAwareThermostat):
                 self._lockout.heat_max is not None
                 and old.attributes.get("outdoor_heat_locked") is True
             )
-            self._lockout.cool_locked = (
-                self._lockout.cool_min is not None
-                and old.attributes.get("outdoor_cool_locked") is True
-            )
+            # Cooling stays locked until a valid reading (fail-closed).
+            self._lockout.cool_locked = self._lockout.cool_min is not None
             self._hold_restored_lock = self._lockout.heat_locked or self._lockout.cool_locked
         await super().async_added_to_hass()
 
     def _update_outdoor(self) -> None:
-        """Read the outdoor sensor and update the lockouts; faults fail open."""
+        """Read the outdoor sensor; faults release heating but lock cooling."""
         if self._outdoor_sensor is None:
             self._outdoor_c = None
             self._outdoor_status = "not_configured"
@@ -613,7 +713,8 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             status = "ok" if value is not None else "invalid"
         if status != "ok" and status != self._outdoor_status:
             _LOGGER.warning(
-                "Outdoor temperature sensor %s is %s; outdoor lockouts are released",
+                "Outdoor temperature sensor %s is %s; the heating lockout is released"
+                " and cooling is locked until a valid reading",
                 self._outdoor_sensor, status,
             )
         self._outdoor_status = status
@@ -622,9 +723,18 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             self._hold_restored_lock = False
         if not self._hold_restored_lock:
             self._lockout.update(value)
+        elif value is None and self._lockout.cool_min is not None:
+            # Cooling never runs without a valid reading, even while holding.
+            self._lockout.cool_locked = True
 
     def _outdoor_lockout(self) -> str:
-        """The lockout affecting the wrapper's current direction (none/heat/cool)."""
+        """The lockout affecting the wrapper's current direction (none/heat/cool).
+
+        In heat_cool both directions are in use, so "both" is possible.
+        """
+        if self._attr_hvac_mode == HVACMode.HEAT_COOL:
+            heat, cool = self._lockout.heat_locked, self._lockout.cool_locked
+            return "both" if heat and cool else "heat" if heat else "cool" if cool else "none"
         if self._attr_hvac_mode == HVACMode.HEAT and self._lockout.heat_locked:
             return "heat"
         if self._attr_hvac_mode == HVACMode.COOL and self._lockout.cool_locked:
@@ -730,12 +840,16 @@ class ClimateBackendThermostat(PriceAwareThermostat):
         mode = self._attr_hvac_mode
         if mode == HVACMode.OFF:
             self._demand_active = False
+            self._selector.stop(mono)
             return Intent("off", None, "wrapper_off")
         wanted: AcMode = "cool" if mode == HVACMode.COOL else "heat"
         if paused:
             # Reconsideration after closure starts from a fresh hysteresis state.
             self._demand_active = False
+            self._selector.stop(mono)
             return Intent("off", None, "window_open")
+        if mode == HVACMode.HEAT_COOL:
+            return self._decide_range(observed, limits, mono)
         if self._lockout.locks(wanted):
             # Only the locked direction is affected; the wrapper mode is kept.
             self._demand_active = False
@@ -759,10 +873,52 @@ class ClimateBackendThermostat(PriceAwareThermostat):
         self._demand_active = bool(wants)
         if not wants:
             return Intent("off", None, "no_demand")
+        # Remembered for heat_cool's changeover interval after a mode switch.
+        self._selector.last_active, self._selector.last_active_at = wanted, mono
         target: float | None = None
         if limits is not None:
             target = native_target(effective, self._compensation(wanted), limits)
         return Intent(wanted, target, "demand")
+
+    def _decide_range(
+        self, observed: Observation, limits: BackendLimits | None, mono: float
+    ) -> Intent:
+        """heat_cool: heat below low, cool above high, idle between.
+
+        A direction locked by the outdoor temperature is never started, and the
+        other direction is never used in its place: a hot room with cooling
+        locked stays idle with the backend off.
+        """
+        current = self._attr_native_current_temperature
+        if current is None:
+            self._selector.stop(mono)
+            return Intent("off", None, "room_temperature_unavailable")
+        if (
+            self._first_evaluation
+            and (
+                (observed.mode == "heat" and not self._lockout.heat_locked)
+                or (observed.mode == "cool" and not self._lockout.cool_locked)
+            )
+        ):
+            # After a restart a pump already running keeps that direction's demand.
+            self._selector.resume(observed.mode, mono)
+        low, high = self._effective_range or self._range
+        direction = self._selector.select(
+            current, low, high, self._cold_tolerance, self._hot_tolerance, mono,
+            heat_allowed=not self._lockout.heat_locked,
+            cool_allowed=not self._lockout.cool_locked,
+        )
+        if direction == "off":
+            status = self._selector.status
+            return Intent(
+                "off", None, status if status in ("outdoor_lockout", "changeover_wait")
+                else "no_demand",
+            )
+        target: float | None = None
+        if limits is not None:
+            setpoint = low if direction == "heat" else high
+            target = native_target(setpoint, self._compensation(direction), limits)
+        return Intent(direction, target, "demand")
 
     async def _async_dispatch(self, command: Command, mono: float) -> None:
         """Send one backend command; the observed state, not success, acknowledges it."""
@@ -796,6 +952,8 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             self._window_status, self._in_sync, self._reported_action,
             self._outdoor_c, self._outdoor_status,
             self._lockout.heat_locked, self._lockout.cool_locked,
+            self._selector.direction, self._selector.status, self._effective_range,
+            self._range_results, self._range_clamped,
         )
 
     async def _async_evaluate(self) -> None:
@@ -804,10 +962,17 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             previous = self._snapshot()
             mono = _monotonic()
             self._read_temperature()
-            self._last_result = self._safe_calculate()
+            if self._attr_hvac_mode == HVACMode.HEAT_COOL:
+                self._calculate_range()
+            else:
+                self._range_results, self._effective_range = None, None
+                self._range_clamped = False
+                self._last_result = self._safe_calculate()
             observed, limits = self._observe()
             self._observed = observed
             intent = self._decide(observed, limits, mono)
+            if self._range_results is not None:
+                self._last_result = self._range_results[1 if intent.mode == "cool" else 0]
             if (
                 self._first_evaluation
                 and observed.available
@@ -870,8 +1035,80 @@ class ClimateBackendThermostat(PriceAwareThermostat):
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Change the wrapper mode; a changed direction never reuses stale demand."""
         if hvac_mode in self._attr_hvac_modes and hvac_mode != self._attr_hvac_mode:
+            now = _monotonic()
+            running: AcMode = (
+                "heat" if self._attr_hvac_mode == HVACMode.HEAT
+                else "cool" if self._attr_hvac_mode == HVACMode.COOL else "off"
+            )
+            if hvac_mode == HVACMode.HEAT_COOL and self._demand_active and running != "off":
+                # Continue the running direction, so the changeover interval
+                # applies before the other one may start.
+                self._selector.resume(running, now)
+            else:
+                # The changeover memory is kept, so re-entering heat_cool cannot
+                # flip the direction faster than the changeover interval.
+                self._selector.stop(now)
             self._demand_active = False
         await super().async_set_hvac_mode(hvac_mode)
+
+    async def async_set_temperature(self, **kwargs: Any) -> None:
+        """Set the base target, or in heat_cool the low/high setpoints.
+
+        ``target_temp_low``/``target_temp_high`` set the range (one alone keeps
+        the other). A single ``temperature`` while in heat_cool moves the range
+        so it is centred on that temperature, keeping its width. An
+        ``hvac_mode`` in the same call is applied first.
+        """
+        if not self._heat_cool:
+            await super().async_set_temperature(**kwargs)
+            return
+        if (mode := kwargs.get(ATTR_HVAC_MODE)) is not None:
+            await self.async_set_hvac_mode(HVACMode(mode))
+        low_in, high_in = kwargs.get(ATTR_TARGET_TEMP_LOW), kwargs.get(ATTR_TARGET_TEMP_HIGH)
+        single = kwargs.get(ATTR_TEMPERATURE)
+        low, high = self._range
+        if low_in is not None or high_in is not None:
+            low = low if low_in is None else float(low_in)
+            high = high if high_in is None else float(high_in)
+            if single is not None and self._attr_hvac_mode != HVACMode.HEAT_COOL:
+                await super().async_set_temperature(temperature=single)
+        elif single is not None and self._attr_hvac_mode == HVACMode.HEAT_COOL:
+            centre, half = float(single), (high - low) / 2.0
+            centre = min(self._attr_max_temp - half, max(self._attr_min_temp + half, centre))
+            low, high = centre - half, centre + half
+        else:
+            await super().async_set_temperature(**kwargs)
+            return
+        if not (isfinite(low) and isfinite(high)) or not (
+            self._attr_min_temp <= low and high <= self._attr_max_temp
+        ):
+            # Publish the stored setpoints so a UI/HomeKit slider snaps back.
+            self.async_write_ha_state()
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="temperature_out_of_range",
+                translation_placeholders={
+                    "min_temp": str(self._attr_min_temp),
+                    "max_temp": str(self._attr_max_temp),
+                },
+            )
+        if high - low < self._gap - 1e-9:
+            self.async_write_ha_state()
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="range_too_narrow",
+                translation_placeholders={"gap": str(self._gap)},
+            )
+        low, high = round(low, 4), round(high, 4)
+        self._attr_native_target_temperature_low = low
+        self._attr_native_target_temperature_high = high
+        # Persisted like the base target, so the range survives restarts.
+        self.hass.config_entries.async_update_entry(
+            self._entry,
+            options={**self._entry.options, CONF_TARGET_LOW: low, CONF_TARGET_HIGH: high},
+        )
+        await self._async_evaluate()
+        self.async_write_ha_state()
 
     @property
     def extra_state_attributes(self) -> dict[str, str | float | bool | None]:
@@ -881,11 +1118,31 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             and self._attr_preset_mode == PRESET_PRICE_AWARE
             and self._attr_hvac_mode != HVACMode.OFF
         )
+        heat_cool = self._attr_hvac_mode == HVACMode.HEAT_COOL
         mode: AcMode = (
-            "cool" if self._attr_hvac_mode == HVACMode.COOL
+            self._selector.direction if heat_cool
+            else "cool" if self._attr_hvac_mode == HVACMode.COOL
             else "heat" if self._attr_hvac_mode == HVACMode.HEAT else "off"
         )
+        effective: float | None = (
+            result.effective_target_c if result is not None and active else self._base_target
+        )
+        if heat_cool:
+            eff_range = self._effective_range or self._range
+            effective = (
+                eff_range[0] if mode == "heat" else eff_range[1] if mode == "cool" else None
+            )
+        range_attrs: dict[str, str | float | bool | None] = {
+            "heat_cool_available": self._heat_cool,
+            "effective_target_low_c": (self._effective_range or self._range)[0]
+            if heat_cool else None,
+            "effective_target_high_c": (self._effective_range or self._range)[1]
+            if heat_cool else None,
+            "active_direction": (mode if mode != "off" else "idle") if heat_cool else None,
+            "heat_cool_status": self._selector.status if heat_cool else None,
+        }
         return {
+            **range_attrs,
             "control_type": self._backend.kind,
             "backend_entity_id": self._backend.entity_id,
             "configured_hvac_modes": ",".join(self._backend.configured_modes),
@@ -893,9 +1150,7 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             "live_control_supported": True,
             "temperature_sample_fresh": self._sensor_fresh,
             "base_target_c": self._base_target,
-            "effective_target_c": (
-                result.effective_target_c if result is not None and active else self._base_target
-            ),
+            "effective_target_c": effective,
             "price_now_sek_per_kwh": result.current_price_sek_per_kwh if result else None,
             "weighted_future_price_sek_per_kwh": (
                 result.future_weighted_price_sek_per_kwh if result else None
@@ -905,7 +1160,10 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             ),
             "future_coverage_fraction": result.future_coverage_fraction if result else 0.0,
             "requested_adjustment_c": result.requested_adjustment_c if result and active else 0.0,
-            "adjustment_clamped": result.clamped if result and active else False,
+            "adjustment_clamped": (
+                (result.clamped or (heat_cool and self._range_clamped))
+                if result and active else False
+            ),
             "optimization_reason": (
                 "off" if self._attr_hvac_mode == HVACMode.OFF
                 else "fixed" if self._attr_preset_mode == PRESET_FIXED
@@ -928,6 +1186,7 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             "pause_reason": (
                 "window_open" if self._window_status == "open_paused"
                 else "outdoor_lockout" if self._intent.reason == "outdoor_lockout"
+                else "changeover_wait" if self._intent.reason == "changeover_wait"
                 else "restart_pause" if self._plan.status == "restart_pause"
                 else None
             ),
@@ -937,5 +1196,12 @@ class ClimateBackendThermostat(PriceAwareThermostat):
             "outdoor_lockout": self._outdoor_lockout(),
             "outdoor_heat_locked": self._lockout.heat_locked,
             "outdoor_cool_locked": self._lockout.cool_locked,
+            # Why cooling is locked: "temperature" (below the limit) or
+            # "no_valid_reading" (sensor missing, unavailable, stale or invalid).
+            "outdoor_cool_lock_cause": (
+                None if not self._lockout.cool_locked
+                else "temperature" if self._outdoor_status == "ok"
+                else "no_valid_reading"
+            ),
             "planned_heating": None,
         }

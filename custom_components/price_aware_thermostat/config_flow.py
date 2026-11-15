@@ -19,6 +19,7 @@ from .backends import validate_backend
 from .const import (
     CONF_AREA,
     CONF_BASE_TEMP,
+    CONF_CHANGEOVER_MINUTES,
     CONF_COLD_TOLERANCE,
     CONF_CONTROL_TYPE,
     CONF_COOL_COMPENSATION,
@@ -26,6 +27,7 @@ from .const import (
     CONF_DEADBAND,
     CONF_FILTER,
     CONF_HEAT_COMPENSATION,
+    CONF_HEAT_COOL_GAP,
     CONF_HEAT_MAX_OUTDOOR,
     CONF_HEATER,
     CONF_HOT_TOLERANCE,
@@ -175,6 +177,8 @@ _AC_KEYS = (
     CONF_COOL_MIN_OUTDOOR,
     CONF_HEAT_MAX_OUTDOOR,
     CONF_OUTDOOR_HYSTERESIS,
+    CONF_HEAT_COOL_GAP,
+    CONF_CHANGEOVER_MINUTES,
 )
 
 # Clearable optional AC fields and the value that means "cleared".
@@ -227,6 +231,15 @@ def _ac_schema(initial: dict[str, Any]) -> dict[vol.Marker, Any]:
             CONF_OUTDOOR_HYSTERESIS,
             default=initial.get(CONF_OUTDOOR_HYSTERESIS, DEFAULTS[CONF_OUTDOOR_HYSTERESIS]),
         ): _number(0, 10, 0.1),
+        # heat_cool (both heat and cool controlled): setpoint gap and changeover.
+        vol.Optional(
+            CONF_HEAT_COOL_GAP,
+            default=initial.get(CONF_HEAT_COOL_GAP, DEFAULTS[CONF_HEAT_COOL_GAP]),
+        ): _number(0.1, 10, 0.1),
+        vol.Optional(
+            CONF_CHANGEOVER_MINUTES,
+            default=initial.get(CONF_CHANGEOVER_MINUTES, DEFAULTS[CONF_CHANGEOVER_MINUTES]),
+        ): _number(0, 240, 5),
     }
 
 

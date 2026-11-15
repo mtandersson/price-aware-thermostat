@@ -34,7 +34,7 @@ def settings(hass: HomeAssistant) -> dict:
     defaults = {key: value for key, value in DEFAULTS.items() if key not in {
         CONF_SHADOW, "heat_compensation", "cool_compensation",
         "window_open_delay_seconds", "window_close_delay_seconds",
-        "outdoor_lockout_hysteresis",
+        "outdoor_lockout_hysteresis", "heat_cool_min_gap", "heat_cool_changeover_minutes",
     }}
     return {
         **defaults, CONF_CONTROL_TYPE: CONTROL_SWITCH, CONF_NAME: "Quality room",

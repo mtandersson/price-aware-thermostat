@@ -208,7 +208,7 @@ async def test_climate_shadow_entry_never_dispatches_and_restores_target(
         state = hass.states.get("climate.room_ac")
         assert state
         assert state.state == "off"
-        assert state.attributes["hvac_modes"] == ["heat", "cool", "off"]
+        assert state.attributes["hvac_modes"] == ["heat", "cool", "heat_cool", "off"]
         assert state.attributes["temperature"] == 23
         assert state.attributes["current_temperature"] == 21
         assert state.attributes["shadow_mode"] is True

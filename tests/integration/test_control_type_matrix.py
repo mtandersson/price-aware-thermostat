@@ -231,7 +231,7 @@ async def test_base_target_and_mode_survive_options_reload_for_both_types(
 async def test_hvac_modes_match_the_control_type(hass: HomeAssistant, kind: str) -> None:
     async with rig_for(kind, hass, shadow=True) as rig:
         modes = rig.attrs()["hvac_modes"]
-        assert modes == (["heat", "off"] if kind == "switch" else ["heat", "cool", "off"])
+        assert modes == (["heat", "off"] if kind == "switch" else ["heat", "cool", "heat_cool", "off"])
 
 
 async def test_switch_and_climate_instances_run_side_by_side_without_interference(
