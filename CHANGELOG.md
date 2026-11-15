@@ -28,6 +28,12 @@ Assistant instance.
 
 ### Fixed
 
+- In shadow mode the thermostat's `hvac_action` (the card's Heating/Cooling/Idle/Off)
+  now shows the wrapper's own proposal instead of the device's reported action, so
+  an off or idle wrapper no longer looks as if it is cooling or heating. Applies to
+  both control types; the device's report stays in `backend_reported_hvac_action`.
+  Live, a switch wrapper that is off now shows `off` once the relay is off (#41).
+
 - The "Nord Pool source needs attention" repair now names the affected
   thermostat, market area and source in its title and description, so several
   thermostat entries can be told apart (#42). The issue ID is unchanged, so

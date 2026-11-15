@@ -284,6 +284,9 @@ mode nothing is written.
   (`planned_heating`, effective target, diagnostics) but sends **no**
   commands to the device. Use it to check behaviour before you hand over
   control.
+- In shadow mode the card's action (Heating, Cooling, Idle, Off) shows what
+  the thermostat *would* do, not what the device is doing. The device's own
+  report is the `backend_reported_hvac_action` attribute (heat pump/AC).
 
 ### Safety acknowledgement
 - Asked once, when you save the options with shadow mode turned off for the

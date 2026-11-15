@@ -382,9 +382,6 @@ class PriceAwareThermostat(RestoreClimate):
                 else self._base_target
             )
             currently_on = heater_state is not None and heater_state.state == STATE_ON
-            self._attr_hvac_action = (
-                HVACAction.HEATING if currently_on else HVACAction.IDLE
-            )
             if self._attr_hvac_mode == HVACMode.OFF:
                 desired: bool | None = False
             else:
@@ -396,6 +393,22 @@ class PriceAwareThermostat(RestoreClimate):
                     self._hot_tolerance,
                 )
             self._planned_heating = desired
+            if self._shadow:
+                # Shadow shows the wrapper's own proposal, never the relay state
+                # (issue #41).
+                self._attr_hvac_action = (
+                    HVACAction.OFF if self._attr_hvac_mode == HVACMode.OFF
+                    else HVACAction.HEATING if desired
+                    else HVACAction.IDLE
+                )
+            elif currently_on:
+                # Live mirrors the relay; a relay still on is never called "off".
+                self._attr_hvac_action = HVACAction.HEATING
+            else:
+                self._attr_hvac_action = (
+                    HVACAction.OFF if self._attr_hvac_mode == HVACMode.OFF
+                    else HVACAction.IDLE
+                )
 
             # In shadow mode *no switch services are called*, even if the sensor
             # is missing or the user explicitly selects HVAC off.
@@ -822,19 +835,37 @@ class ClimateBackendThermostat(PriceAwareThermostat):
                     and abs(observed.target - intent.native_target) <= limits.tolerance
                 )
             )
-            # Report what the backend says; only claim "off" when it really is off.
-            self._attr_hvac_action = (
-                HVACAction.OFF
-                if self._attr_hvac_mode == HVACMode.OFF
-                and observed.available
-                and observed.mode == "off"
-                else self._reported_action
-            )
+            self._attr_hvac_action = self._wrapper_action(observed)
             # Shadow mode computes the proposal but calls no climate or switch service.
             if plan.command is not None and not self._shadow and not self._unloading:
                 await self._async_dispatch(plan.command, mono)
             if previous != self._snapshot():
                 self.async_write_ha_state()
+
+    def _wrapper_action(self, observed: Observation) -> HVACAction | None:
+        """The wrapper's hvac_action.
+
+        In shadow mode nothing is commanded, so the action is the wrapper's own
+        proposal and never the backend's report (issue #41): off when the wrapper
+        is off, heating/cooling only while the proposal has demand, otherwise
+        idle (no demand, window pause, outdoor lockout, sensor fault). Live, it
+        mirrors the backend and only claims "off" when the backend really is off.
+        """
+        if self._shadow:
+            if self._attr_hvac_mode == HVACMode.OFF:
+                return HVACAction.OFF
+            if self._intent.mode == "heat":
+                return HVACAction.HEATING
+            if self._intent.mode == "cool":
+                return HVACAction.COOLING
+            return HVACAction.IDLE
+        if (
+            self._attr_hvac_mode == HVACMode.OFF
+            and observed.available
+            and observed.mode == "off"
+        ):
+            return HVACAction.OFF
+        return self._reported_action
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Change the wrapper mode; a changed direction never reuses stale demand."""
